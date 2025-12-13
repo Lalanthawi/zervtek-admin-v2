@@ -481,19 +481,23 @@ export function PurchaseDetailModal({
                     </div>
                   </div>
 
-                  {/* Progress Steps */}
-                  <div className="border-b border-border/50 px-6 py-5 bg-muted/20">
-                    <SteppedProgress auction={auction} />
-                  </div>
-
                   {/* Tabs Content */}
                   <Tabs defaultValue="overview" className="p-6">
                     <TabsList className="mb-6 bg-muted/50">
                       <TabsTrigger value="overview" className="data-[state=active]:bg-background">
                         Overview
                       </TabsTrigger>
+                      <TabsTrigger value="payment" className="data-[state=active]:bg-background">
+                        Payment
+                      </TabsTrigger>
                       <TabsTrigger value="documents" className="data-[state=active]:bg-background">
                         Documents
+                      </TabsTrigger>
+                      <TabsTrigger value="shipping" className="data-[state=active]:bg-background">
+                        Shipping
+                      </TabsTrigger>
+                      <TabsTrigger value="invoice" className="data-[state=active]:bg-background">
+                        Invoice
                       </TabsTrigger>
                       <TabsTrigger value="history" className="data-[state=active]:bg-background">
                         History
@@ -501,6 +505,11 @@ export function PurchaseDetailModal({
                     </TabsList>
 
                     <TabsContent value="overview" className="mt-0 space-y-6">
+                      {/* Progress Steps */}
+                      <div className="rounded-xl bg-muted/30 p-5">
+                        <SteppedProgress auction={auction} />
+                      </div>
+
                       <div className="grid gap-6 md:grid-cols-2">
                         {/* Vehicle Info */}
                         <div className="rounded-xl bg-muted/30 p-4">
@@ -569,51 +578,6 @@ export function PurchaseDetailModal({
                             </div>
                           )}
                         </div>
-
-                        {/* Payment Info */}
-                        <div className="rounded-xl bg-muted/30 p-4">
-                          <div className="flex items-center gap-2 mb-4">
-                            <CreditCard className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="text-sm font-medium">Payment Breakdown</h3>
-                          </div>
-                          <PaymentBreakdown auction={auction} />
-                        </div>
-
-                        {/* Shipping Info */}
-                        <div className="rounded-xl bg-muted/30 p-4">
-                          <div className="flex items-center gap-2 mb-4">
-                            <Ship className="h-4 w-4 text-muted-foreground" />
-                            <h3 className="text-sm font-medium">Shipping Information</h3>
-                          </div>
-                          {auction.shipment ? (
-                            <div className="space-y-1 divide-y divide-border/50">
-                              <InfoRow label="Carrier" value={auction.shipment.carrier} />
-                              <InfoRow
-                                label="Tracking #"
-                                value={auction.shipment.trackingNumber}
-                                copyable
-                                monospace
-                              />
-                              <InfoRow
-                                label="Status"
-                                value={
-                                  <Badge variant="outline" className="text-xs">
-                                    {auction.shipment.status.replace(/_/g, ' ')}
-                                  </Badge>
-                                }
-                              />
-                              <InfoRow label="Location" value={auction.shipment.currentLocation} />
-                              {auction.shipment.estimatedDelivery && (
-                                <InfoRow
-                                  label="Est. Delivery"
-                                  value={format(new Date(auction.shipment.estimatedDelivery), 'MMM dd, yyyy')}
-                                />
-                              )}
-                            </div>
-                          ) : (
-                            <ShippingEmptyState />
-                          )}
-                        </div>
                       </div>
 
                       {/* Notes */}
@@ -623,6 +587,16 @@ export function PurchaseDetailModal({
                           <p className="text-sm text-muted-foreground">{auction.notes}</p>
                         </div>
                       )}
+                    </TabsContent>
+
+                    <TabsContent value="payment" className="mt-0">
+                      <div className="rounded-xl bg-muted/30 p-4">
+                        <div className="flex items-center gap-2 mb-4">
+                          <CreditCard className="h-4 w-4 text-muted-foreground" />
+                          <h3 className="text-sm font-medium">Payment Breakdown</h3>
+                        </div>
+                        <PaymentBreakdown auction={auction} />
+                      </div>
                     </TabsContent>
 
                     <TabsContent value="documents" className="mt-0">
@@ -664,6 +638,125 @@ export function PurchaseDetailModal({
                             <p className="text-sm text-muted-foreground">No documents uploaded yet</p>
                           </div>
                         )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="shipping" className="mt-0">
+                      <div className="rounded-xl bg-muted/30 p-4">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Ship className="h-4 w-4 text-muted-foreground" />
+                          <h3 className="text-sm font-medium">Shipping Information</h3>
+                        </div>
+                        {auction.shipment ? (
+                          <div className="space-y-4">
+                            <div className="space-y-1 divide-y divide-border/50">
+                              <InfoRow label="Carrier" value={auction.shipment.carrier} />
+                              <InfoRow
+                                label="Tracking #"
+                                value={auction.shipment.trackingNumber}
+                                copyable
+                                monospace
+                              />
+                              <InfoRow
+                                label="Status"
+                                value={
+                                  <Badge variant="outline" className="text-xs">
+                                    {auction.shipment.status.replace(/_/g, ' ')}
+                                  </Badge>
+                                }
+                              />
+                              <InfoRow label="Current Location" value={auction.shipment.currentLocation} />
+                              {auction.shipment.estimatedDelivery && (
+                                <InfoRow
+                                  label="Est. Delivery"
+                                  value={format(new Date(auction.shipment.estimatedDelivery), 'MMM dd, yyyy')}
+                                />
+                              )}
+                            </div>
+                            <div className="pt-3 border-t border-border/50">
+                              <div className="space-y-1 divide-y divide-border/50">
+                                <InfoRow label="Destination Port" value={auction.destinationPort || '—'} />
+                                <InfoRow label="Shipping Cost" value={`¥${auction.shippingCost.toLocaleString()}`} />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <ShippingEmptyState />
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="invoice" className="mt-0">
+                      <div className="rounded-xl bg-muted/30 p-4">
+                        <div className="flex items-center gap-2 mb-4">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <h3 className="text-sm font-medium">Invoice Details</h3>
+                        </div>
+                        <div className="space-y-4">
+                          {/* Invoice Header */}
+                          <div className="flex items-center justify-between pb-3 border-b border-border/50">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Invoice Number</p>
+                              <p className="font-mono font-medium">INV-{auction.auctionId}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-muted-foreground">Date</p>
+                              <p className="font-medium">{format(new Date(auction.auctionEndDate), 'MMM dd, yyyy')}</p>
+                            </div>
+                          </div>
+
+                          {/* Bill To */}
+                          <div className="pb-3 border-b border-border/50">
+                            <p className="text-sm text-muted-foreground mb-1">Bill To</p>
+                            <p className="font-medium">{auction.winnerName}</p>
+                            <p className="text-sm text-muted-foreground">{auction.winnerEmail}</p>
+                            {auction.winnerAddress && (
+                              <p className="text-sm text-muted-foreground">{auction.winnerAddress}</p>
+                            )}
+                          </div>
+
+                          {/* Line Items */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Vehicle ({auction.vehicleInfo.year} {auction.vehicleInfo.make} {auction.vehicleInfo.model})</span>
+                              <span className="font-medium">¥{auction.winningBid.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Shipping Cost</span>
+                              <span className="font-medium">¥{auction.shippingCost.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Customs Fee</span>
+                              <span className="font-medium">¥{auction.customsFee.toLocaleString()}</span>
+                            </div>
+                          </div>
+
+                          {/* Total */}
+                          <div className="pt-3 border-t border-border/50">
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold">Total Amount</span>
+                              <span className="text-xl font-bold">¥{auction.totalAmount.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center mt-2">
+                              <span className="text-sm text-muted-foreground">Amount Paid</span>
+                              <span className="font-medium text-emerald-600">¥{auction.paidAmount.toLocaleString()}</span>
+                            </div>
+                            {auction.totalAmount - auction.paidAmount > 0 && (
+                              <div className="flex justify-between items-center mt-2">
+                                <span className="text-sm text-muted-foreground">Balance Due</span>
+                                <span className="font-medium text-orange-600">¥{(auction.totalAmount - auction.paidAmount).toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="pt-3 border-t border-border/50 flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={onGenerateInvoice}>
+                              <Download className="mr-2 h-4 w-4" />
+                              Download PDF
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </TabsContent>
 
@@ -759,28 +852,10 @@ export function PurchaseDetailModal({
                   {/* Footer Actions */}
                   <div className="flex items-center justify-between border-t border-border/50 px-6 py-4 bg-muted/20">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {onGenerateInvoice && (
-                        <Button size="sm" variant="outline" onClick={onGenerateInvoice}>
-                          <FileText className="mr-2 h-4 w-4" />
-                          Invoice
-                        </Button>
-                      )}
                       {onRecordPayment && auction.paymentStatus !== 'completed' && (
                         <Button size="sm" onClick={onRecordPayment}>
                           <CreditCard className="mr-2 h-4 w-4" />
                           Record Payment
-                        </Button>
-                      )}
-                      {onUploadDocuments && (
-                        <Button size="sm" variant="outline" onClick={onUploadDocuments}>
-                          <FileText className="mr-2 h-4 w-4" />
-                          Upload Docs
-                        </Button>
-                      )}
-                      {onUpdateShipping && auction.paymentStatus === 'completed' && !auction.shipment && (
-                        <Button size="sm" variant="outline" onClick={onUpdateShipping}>
-                          <Ship className="mr-2 h-4 w-4" />
-                          Add Shipping
                         </Button>
                       )}
                     </div>

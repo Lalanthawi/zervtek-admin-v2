@@ -25,6 +25,7 @@ export interface Bid {
     year: number
     chassisNumber: string
     thumbnailImage: string
+    images: string[]
   }
   bidder: {
     id: string
@@ -293,7 +294,8 @@ const generateBid = (index: number, forceToday: boolean = false, forceStatus?: B
       model: vehicleData.model,
       year,
       chassisNumber: generateChassisNumber(vehicleData.make),
-      thumbnailImage: realVehicle.images[0] || '#',
+      thumbnailImage: realVehicle.images[1] || realVehicle.images[0] || '#',
+      images: realVehicle.images || [],
     },
     bidder,
     amount,

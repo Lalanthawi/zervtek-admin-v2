@@ -27,36 +27,29 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { VehicleDetailModal } from './components/vehicle-detail-modal'
+import { CreateInvoiceDrawer } from '@/features/invoices/components/create-invoice-drawer'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Slider } from '@/components/ui/slider'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Calendar,
   Car,
   ChevronLeft,
   ChevronRight,
-  Clipboard,
   Eye,
-  FileText,
   Filter,
-  Fuel,
   Gauge,
-  Gavel,
-  Hash,
   LayoutGrid,
   LayoutList,
   MapPin,
-  Palette,
   Plus,
   RotateCcw,
   Search as SearchIcon,
   Settings,
-  X,
 } from 'lucide-react'
 import { vehicles as initialVehicles, type Vehicle } from './data/vehicles'
 
@@ -99,7 +92,7 @@ const emptyVehicle: NewVehicleForm = {
 export function StockVehicles() {
   const [vehicles, setVehicles] = useState(initialVehicles)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [activeTab, setActiveTab] = useState('all')
+  const [activeTab, setActiveTab] = useState('available')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
@@ -107,6 +100,8 @@ export function StockVehicles() {
   const [newVehicle, setNewVehicle] = useState(emptyVehicle)
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false)
+  const [invoiceVehicle, setInvoiceVehicle] = useState<Vehicle | null>(null)
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
@@ -812,226 +807,41 @@ export function StockVehicles() {
       </Main>
 
       {/* View Vehicle Modal */}
-      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
-        <DialogContent className='max-w-2xl gap-0 p-0'>
-          {selectedVehicle && (
-            <>
-              {/* Header with vehicle image */}
-              <div className='relative'>
-                <div className='aspect-[3/1] w-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900'>
-                  {selectedVehicle.images && selectedVehicle.images.length > 0 ? (
-                    <Image
-                      src={selectedVehicle.images[0]}
-                      alt={`${selectedVehicle.make} ${selectedVehicle.model}`}
-                      fill
-                      className='object-cover opacity-90'
-                    />
-                  ) : (
-                    <div className='flex h-full w-full items-center justify-center'>
-                      <Car className='h-16 w-16 text-slate-400' />
-                    </div>
-                  )}
-                </div>
-                <div className='absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent' />
-                <div className='absolute bottom-0 left-0 right-0 p-4 text-white'>
-                  <div className='flex items-start justify-between'>
-                    <div>
-                      <p className='text-sm font-medium opacity-90'>
-                        {selectedVehicle.auctionHouse || 'Stock'} • {selectedVehicle.stockNumber}
-                      </p>
-                      <h3 className='mt-1 text-xl font-bold'>
-                        {selectedVehicle.year} {selectedVehicle.make} {selectedVehicle.model}
-                      </h3>
-                    </div>
-                    <div className='flex gap-2'>
-                      <Badge className={getStatusColor(selectedVehicle.status)}>
-                        {selectedVehicle.status.charAt(0).toUpperCase() + selectedVehicle.status.slice(1)}
-                      </Badge>
-                      {selectedVehicle.score && (
-                        <Badge variant='secondary' className='bg-white/20 text-white'>
-                          {selectedVehicle.score}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+      <VehicleDetailModal
+        vehicle={selectedVehicle}
+        open={isViewModalOpen}
+        onClose={() => setIsViewModalOpen(false)}
+        onCreateInvoice={(vehicle) => {
+          setInvoiceVehicle(vehicle)
+          setIsViewModalOpen(false)
+          setIsInvoiceDrawerOpen(true)
+        }}
+        onDelete={(vehicle) => {
+          setVehicles(vehicles.filter(v => v.id !== vehicle.id))
+          setIsViewModalOpen(false)
+          toast.success('Vehicle deleted')
+        }}
+      />
 
-              {/* Price highlight */}
-              <div className='border-b bg-muted/30 px-6 py-4'>
-                <div className='flex items-center justify-between'>
-                  <div>
-                    <p className='text-sm text-muted-foreground'>Listed Price</p>
-                    <p className='text-3xl font-bold tracking-tight text-primary'>
-                      {selectedVehicle.priceDisplay || `¥${selectedVehicle.price.toLocaleString()}`}
-                    </p>
-                  </div>
-                  <div className='text-right'>
-                    <p className='text-sm text-muted-foreground'>Mileage</p>
-                    <p className='text-xl font-semibold'>
-                      {selectedVehicle.mileageDisplay || `${selectedVehicle.mileage.toLocaleString()} km`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className='max-h-[50vh] space-y-6 overflow-y-auto p-6'>
-                {/* Vehicle Card */}
-                <div className='flex items-center gap-4 rounded-lg border p-4'>
-                  <div className='flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary'>
-                    <Car className='h-6 w-6' />
-                  </div>
-                  <div className='flex-1'>
-                    <div className='flex items-center gap-2'>
-                      <p className='font-semibold'>{selectedVehicle.make} {selectedVehicle.model}</p>
-                      <Badge variant='outline'>{selectedVehicle.year}</Badge>
-                    </div>
-                    <p className='text-sm text-muted-foreground'>
-                      {selectedVehicle.transmission} • {selectedVehicle.fuelType}
-                    </p>
-                    <div className='mt-1 flex items-center gap-3 text-xs text-muted-foreground'>
-                      <span>{selectedVehicle.exteriorColor}</span>
-                      <span>•</span>
-                      <span>{selectedVehicle.location}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Details Grid */}
-                <div className='grid grid-cols-2 gap-4'>
-                  <div className='space-y-4'>
-                    <div>
-                      <p className='mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
-                        Vehicle Details
-                      </p>
-                      <div className='space-y-2 rounded-lg border p-3'>
-                        <div className='flex justify-between'>
-                          <span className='text-sm text-muted-foreground'>Make</span>
-                          <span className='text-sm font-medium'>{selectedVehicle.make}</span>
-                        </div>
-                        <div className='flex justify-between'>
-                          <span className='text-sm text-muted-foreground'>Model</span>
-                          <span className='text-sm font-medium'>{selectedVehicle.model}</span>
-                        </div>
-                        {selectedVehicle.modelCode && (
-                          <div className='flex justify-between'>
-                            <span className='text-sm text-muted-foreground'>Model Code</span>
-                            <span className='font-mono text-xs'>{selectedVehicle.modelCode}</span>
-                          </div>
-                        )}
-                        <div className='flex justify-between'>
-                          <span className='text-sm text-muted-foreground'>Transmission</span>
-                          <span className='text-sm capitalize'>{selectedVehicle.transmission}</span>
-                        </div>
-                        {selectedVehicle.displacement && (
-                          <div className='flex justify-between'>
-                            <span className='text-sm text-muted-foreground'>Engine</span>
-                            <span className='text-sm'>{selectedVehicle.displacement}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className='space-y-4'>
-                    <div>
-                      <p className='mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
-                        Condition & Location
-                      </p>
-                      <div className='space-y-2 rounded-lg border p-3'>
-                        <div className='flex justify-between'>
-                          <span className='text-sm text-muted-foreground'>Color</span>
-                          <span className='text-sm'>{selectedVehicle.exteriorColor}</span>
-                        </div>
-                        {selectedVehicle.exteriorGrade && (
-                          <div className='flex justify-between'>
-                            <span className='text-sm text-muted-foreground'>Ext. Grade</span>
-                            <span className='text-sm'>{selectedVehicle.exteriorGrade}</span>
-                          </div>
-                        )}
-                        {selectedVehicle.interiorGrade && (
-                          <div className='flex justify-between'>
-                            <span className='text-sm text-muted-foreground'>Int. Grade</span>
-                            <span className='text-sm'>{selectedVehicle.interiorGrade}</span>
-                          </div>
-                        )}
-                        <div className='flex justify-between'>
-                          <span className='text-sm text-muted-foreground'>Location</span>
-                          <span className='flex items-center gap-1 text-sm'>
-                            <MapPin className='h-3 w-3' />
-                            {selectedVehicle.location}
-                          </span>
-                        </div>
-                        {selectedVehicle.dateAvailable && (
-                          <div className='flex justify-between'>
-                            <span className='text-sm text-muted-foreground'>Available</span>
-                            <span className='text-sm'>{selectedVehicle.dateAvailable}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Grade */}
-                {selectedVehicle.grade && (
-                  <div>
-                    <p className='mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
-                      Grade
-                    </p>
-                    <div className='rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30'>
-                      <p className='text-sm'>{selectedVehicle.grade}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Notes */}
-                {selectedVehicle.history && (
-                  <div>
-                    <p className='mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
-                      Notes
-                    </p>
-                    <div className='rounded-lg border bg-muted/30 p-3'>
-                      <p className='text-sm'>{selectedVehicle.history}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className='flex items-center justify-between border-t px-6 py-4'>
-                <div className='flex items-center gap-2'>
-                  <Button
-                    size='sm'
-                    onClick={() => {
-                      setIsViewModalOpen(false)
-                      window.location.href = `/invoices?vehicle=${encodeURIComponent(`${selectedVehicle.year} ${selectedVehicle.make} ${selectedVehicle.model}`)}&price=${selectedVehicle.price}&stock=${selectedVehicle.stockNumber}`
-                    }}
-                  >
-                    <FileText className='mr-2 h-4 w-4' />
-                    Create Invoice
-                  </Button>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    onClick={() => {
-                      navigator.clipboard.writeText(selectedVehicle.stockNumber)
-                      toast.success('Stock number copied')
-                    }}
-                  >
-                    <Clipboard className='mr-2 h-4 w-4' />
-                    Copy Stock #
-                  </Button>
-                </div>
-                <Button variant='ghost' onClick={() => setIsViewModalOpen(false)}>
-                  Close
-                </Button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Create Invoice Drawer */}
+      <CreateInvoiceDrawer
+        open={isInvoiceDrawerOpen}
+        onOpenChange={setIsInvoiceDrawerOpen}
+        preselectedVehicle={invoiceVehicle ? {
+          id: invoiceVehicle.id,
+          stockNumber: invoiceVehicle.stockNumber,
+          year: invoiceVehicle.year,
+          make: invoiceVehicle.make,
+          model: invoiceVehicle.model,
+          price: invoiceVehicle.price,
+          status: invoiceVehicle.status,
+          location: invoiceVehicle.location,
+          images: invoiceVehicle.images,
+        } : null}
+        onSuccess={() => {
+          setInvoiceVehicle(null)
+        }}
+      />
 
       {/* Add Vehicle Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { format } from 'date-fns'
+import { useState, useEffect, useRef } from 'react'
+import { format, formatDistanceToNow } from 'date-fns'
 import { motion } from 'framer-motion'
 import {
   MoreHorizontal,
@@ -15,11 +15,15 @@ import {
   Package,
   MapPin,
   Check,
+  User,
+  Calendar,
+  Banknote,
+  FileCheck,
+  Anchor,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import {
   Tooltip,
   TooltipContent,
@@ -50,72 +54,45 @@ interface VehicleCardProps {
   onMarkCompleted: () => void
 }
 
+// Muted, sophisticated status configuration
 const getStatusConfig = (status: WonAuction['status']) => {
   const config: Record<
     WonAuction['status'],
     {
       label: string
       icon: React.ReactNode
-      borderColor: string
-      badgeBg: string
-      badgeText: string
-      badgeBorder: string
-      dotColor: string
+      className: string
     }
   > = {
     payment_pending: {
       label: 'Payment Pending',
-      icon: <CreditCard className='h-3.5 w-3.5' />,
-      borderColor: 'border-l-amber-500',
-      badgeBg: 'bg-amber-50',
-      badgeText: 'text-amber-700',
-      badgeBorder: 'border-amber-200',
-      dotColor: 'bg-amber-500',
+      icon: <CreditCard className='h-3 w-3' />,
+      className: 'bg-amber-500/10 text-amber-600 border-transparent',
     },
     processing: {
       label: 'Processing',
-      icon: <Clock className='h-3.5 w-3.5' />,
-      borderColor: 'border-l-blue-500',
-      badgeBg: 'bg-blue-50',
-      badgeText: 'text-blue-700',
-      badgeBorder: 'border-blue-200',
-      dotColor: 'bg-blue-500',
+      icon: <Clock className='h-3 w-3' />,
+      className: 'bg-blue-500/10 text-blue-600 border-transparent',
     },
     documents_pending: {
       label: 'Documents Pending',
-      icon: <FileText className='h-3.5 w-3.5' />,
-      borderColor: 'border-l-slate-500',
-      badgeBg: 'bg-slate-50',
-      badgeText: 'text-slate-700',
-      badgeBorder: 'border-slate-200',
-      dotColor: 'bg-slate-500',
+      icon: <FileText className='h-3 w-3' />,
+      className: 'bg-muted text-muted-foreground border-transparent',
     },
     shipping: {
       label: 'In Transit',
-      icon: <Ship className='h-3.5 w-3.5' />,
-      borderColor: 'border-l-purple-500',
-      badgeBg: 'bg-purple-50',
-      badgeText: 'text-purple-700',
-      badgeBorder: 'border-purple-200',
-      dotColor: 'bg-purple-500',
+      icon: <Ship className='h-3 w-3' />,
+      className: 'bg-blue-500/10 text-blue-600 border-transparent',
     },
     delivered: {
       label: 'Delivered',
-      icon: <Package className='h-3.5 w-3.5' />,
-      borderColor: 'border-l-emerald-500',
-      badgeBg: 'bg-emerald-50',
-      badgeText: 'text-emerald-700',
-      badgeBorder: 'border-emerald-200',
-      dotColor: 'bg-emerald-500',
+      icon: <Package className='h-3 w-3' />,
+      className: 'bg-emerald-500/10 text-emerald-600 border-transparent',
     },
     completed: {
       label: 'Completed',
-      icon: <CheckCircle2 className='h-3.5 w-3.5' />,
-      borderColor: 'border-l-gray-400',
-      badgeBg: 'bg-gray-50',
-      badgeText: 'text-gray-600',
-      badgeBorder: 'border-gray-200',
-      dotColor: 'bg-gray-400',
+      icon: <CheckCircle2 className='h-3 w-3' />,
+      className: 'bg-muted text-muted-foreground border-transparent',
     },
   }
   return config[status]
@@ -136,31 +113,55 @@ export function VehicleCard({
 }: VehicleCardProps) {
   const [copied, setCopied] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const imageIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const images = auction.vehicleInfo.images.filter(img => img !== '#' && img)
+  const defaultImageIndex = images.length > 1 ? 1 : 0 // Use 2nd image as default
+  const [currentImageIndex, setCurrentImageIndex] = useState(defaultImageIndex)
+
+  // Cycle through images on hover
+  useEffect(() => {
+    if (isHovered && images.length > 1) {
+      imageIntervalRef.current = setInterval(() => {
+        setCurrentImageIndex((prev) => (prev + 1) % images.length)
+      }, 1000)
+    } else {
+      if (imageIntervalRef.current) {
+        clearInterval(imageIntervalRef.current)
+        imageIntervalRef.current = null
+      }
+      setCurrentImageIndex(defaultImageIndex)
+    }
+
+    return () => {
+      if (imageIntervalRef.current) {
+        clearInterval(imageIntervalRef.current)
+      }
+    }
+  }, [isHovered, images.length, defaultImageIndex])
 
   // Loading skeleton
   if (loading) {
     return (
-      <Card className='py-0 gap-0 border-l-4 border-l-muted'>
-        <CardContent className='p-0'>
-          <div className='flex'>
+      <Card className='border-border/50'>
+        <CardContent className='p-5'>
+          <div className='flex gap-5'>
             {/* Image skeleton */}
-            <div className='w-[120px] h-[80px] shrink-0 animate-pulse bg-muted' />
+            <div className='w-[200px] h-[140px] rounded-lg animate-pulse bg-muted/50 shrink-0' />
             {/* Content skeleton */}
-            <div className='flex-1 p-4 space-y-4'>
-              {/* Header */}
-              <div className='flex items-start justify-between'>
+            <div className='flex-1 space-y-4'>
+              <div className='flex justify-between'>
                 <div className='space-y-2'>
-                  <div className='h-5 w-48 animate-pulse rounded bg-muted' />
-                  <div className='h-4 w-32 animate-pulse rounded bg-muted' />
+                  <div className='h-5 w-48 animate-pulse rounded bg-muted/50' />
+                  <div className='h-4 w-64 animate-pulse rounded bg-muted/50' />
                 </div>
-                <div className='h-6 w-28 animate-pulse rounded-full bg-muted' />
+                <div className='h-6 w-28 animate-pulse rounded-md bg-muted/50' />
               </div>
-              {/* Grid */}
-              <div className='grid grid-cols-6 gap-4'>
+              <div className='grid grid-cols-6 gap-6'>
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className='space-y-1.5'>
-                    <div className='h-3 w-12 animate-pulse rounded bg-muted' />
-                    <div className='h-4 w-16 animate-pulse rounded bg-muted' />
+                    <div className='h-3 w-14 animate-pulse rounded bg-muted/50' />
+                    <div className='h-4 w-20 animate-pulse rounded bg-muted/50' />
                   </div>
                 ))}
               </div>
@@ -175,6 +176,8 @@ export function VehicleCard({
   const statusConfig = getStatusConfig(auction.status)
   const paymentProgress = Math.round((auction.paidAmount / auction.totalAmount) * 100)
   const vehicleTitle = `${auction.vehicleInfo.year} ${auction.vehicleInfo.make} ${auction.vehicleInfo.model}`
+  const documentsCount = auction.documents.length
+  const paymentsCount = auction.payments.length
 
   const copyVin = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -186,9 +189,9 @@ export function VehicleCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.15 }}
       className='group'
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -198,13 +201,12 @@ export function VehicleCard({
         role='button'
         aria-label={`View details for ${vehicleTitle}`}
         className={cn(
-          'py-0 gap-0 cursor-pointer overflow-hidden',
-          'border-l-4 transition-all duration-200',
+          'cursor-pointer overflow-hidden transition-all duration-150',
+          'border-border/50 bg-card',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          statusConfig.borderColor,
           selected
-            ? 'ring-2 ring-primary bg-primary/5'
-            : 'hover:bg-muted/50 hover:shadow-md'
+            ? 'border-l-2 border-l-primary bg-primary/5'
+            : 'hover:bg-accent/5'
         )}
         onClick={onViewDetails}
         onKeyDown={(e) => {
@@ -214,91 +216,120 @@ export function VehicleCard({
           }
         }}
       >
-        <CardContent className='p-0'>
-          <div className='flex'>
-            {/* Vehicle Image - 120x80 with hover zoom */}
-            <div className='relative w-[120px] h-[80px] shrink-0 overflow-hidden bg-muted'>
-              {auction.vehicleInfo.images.length > 0 &&
-              auction.vehicleInfo.images[0] !== '#' ? (
-                <img
-                  src={auction.vehicleInfo.images[0]}
-                  alt={vehicleTitle}
-                  className={cn(
-                    'h-full w-full object-cover transition-transform duration-300',
-                    isHovered && 'scale-110'
+        <CardContent className='p-5'>
+          <div className='flex gap-5'>
+            {/* Vehicle Image - Larger with hover slideshow */}
+            <div
+              className={cn(
+                'relative w-[200px] h-[140px] rounded-lg overflow-hidden bg-muted/30 shrink-0',
+                'transition-transform duration-150',
+                isHovered && 'scale-[1.02]'
+              )}
+            >
+              {images.length > 0 ? (
+                <>
+                  <img
+                    src={images[currentImageIndex]}
+                    alt={`${vehicleTitle} - Image ${currentImageIndex + 1}`}
+                    className='h-full w-full object-cover transition-opacity duration-300'
+                  />
+                  {/* Image indicators */}
+                  {images.length > 1 && (
+                    <div className='absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1'>
+                      {images.map((_, idx) => (
+                        <div
+                          key={idx}
+                          className={cn(
+                            'w-1.5 h-1.5 rounded-full transition-all duration-200',
+                            idx === currentImageIndex
+                              ? 'bg-white w-3'
+                              : 'bg-white/50'
+                          )}
+                        />
+                      ))}
+                    </div>
                   )}
-                />
+                  {/* Image count badge */}
+                  {images.length > 1 && (
+                    <div className='absolute top-2 right-2 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded'>
+                      {currentImageIndex + 1}/{images.length}
+                    </div>
+                  )}
+                </>
               ) : (
-                <div className='flex h-full w-full items-center justify-center bg-muted'>
-                  <span className='text-[10px] text-muted-foreground'>No Image</span>
+                <div className='flex h-full w-full items-center justify-center'>
+                  <span className='text-xs text-muted-foreground/50'>No Image</span>
                 </div>
               )}
             </div>
 
-            {/* Content */}
-            <div className='flex-1 p-4 min-w-0'>
-              {/* Header Row: Title + Status Badge + Actions */}
-              <div className='flex items-start justify-between gap-4 mb-3'>
-                {/* Title & VIN */}
+            {/* Main Content */}
+            <div className='flex-1 min-w-0'>
+              {/* Header Row */}
+              <div className='flex items-start justify-between gap-4 mb-4'>
+                {/* Left: Title, VIN, Customer */}
                 <div className='min-w-0 flex-1'>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <h2 className='text-base font-semibold text-foreground truncate cursor-default'>
-                        {vehicleTitle}
-                      </h2>
-                    </TooltipTrigger>
-                    <TooltipContent side='top'>
-                      <p>{vehicleTitle}</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <div className='flex items-center gap-3'>
+                    <h2 className='text-base font-medium text-foreground truncate'>
+                      {vehicleTitle}
+                    </h2>
+                    <span className='text-xs text-muted-foreground shrink-0'>
+                      #{auction.auctionId}
+                    </span>
+                  </div>
 
-                  {/* VIN with copy on hover */}
-                  <div className='flex items-center gap-2 mt-1'>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={copyVin}
-                          className={cn(
-                            'inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground',
-                            'hover:text-foreground transition-colors rounded px-1 -ml-1',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                          )}
-                          aria-label={`Copy VIN ${auction.vehicleInfo.vin}`}
-                        >
-                          <span className='truncate max-w-[140px]'>{auction.vehicleInfo.vin}</span>
-                          {copied ? (
-                            <Check className='h-3 w-3 text-emerald-500' />
-                          ) : (
-                            <Copy className={cn('h-3 w-3', isHovered ? 'opacity-100' : 'opacity-0')} />
-                          )}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side='bottom'>
-                        <p>{copied ? 'Copied!' : 'Click to copy VIN'}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className='text-muted-foreground/40'>|</span>
-                    <span className='text-xs text-muted-foreground truncate'>{auction.winnerName}</span>
+                  {/* VIN + Customer Row */}
+                  <div className='flex items-center gap-4 mt-1.5'>
+                    <button
+                      onClick={copyVin}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground',
+                        'hover:text-foreground transition-colors rounded-sm',
+                        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                      )}
+                      aria-label={`Copy VIN ${auction.vehicleInfo.vin}`}
+                    >
+                      <span>{auction.vehicleInfo.vin}</span>
+                      {copied ? (
+                        <Check className='h-3 w-3 text-emerald-500' />
+                      ) : (
+                        <Copy className={cn(
+                          'h-3 w-3 transition-opacity',
+                          isHovered ? 'opacity-60' : 'opacity-0'
+                        )} />
+                      )}
+                    </button>
+
+                    <span className='text-border'>|</span>
+
+                    <span className='inline-flex items-center gap-1.5 text-sm text-muted-foreground'>
+                      <User className='h-3 w-3 shrink-0' />
+                      <span className='truncate'>{auction.winnerName}</span>
+                    </span>
+
+                    <span className='text-border'>|</span>
+
+                    <span className='inline-flex items-center gap-1.5 text-sm text-muted-foreground'>
+                      <Calendar className='h-3 w-3 shrink-0' />
+                      <span>{format(new Date(auction.auctionEndDate), 'MMM d, yyyy')}</span>
+                    </span>
                   </div>
                 </div>
 
-                {/* Status Badge + Actions */}
+                {/* Right: Status Badge + Actions */}
                 <div className='flex items-center gap-2 shrink-0'>
-                  {/* Status Badge - larger with icon */}
                   <Badge
                     variant='outline'
                     className={cn(
-                      'px-2.5 py-1 gap-1.5 font-medium',
-                      statusConfig.badgeBg,
-                      statusConfig.badgeText,
-                      statusConfig.badgeBorder
+                      'text-xs font-medium px-2.5 py-1 rounded-md gap-1.5',
+                      statusConfig.className
                     )}
                   >
                     {statusConfig.icon}
                     <span>{statusConfig.label}</span>
                   </Badge>
 
-                  {/* Actions Menu with Tooltip */}
+                  {/* Actions Menu */}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div>
@@ -309,30 +340,32 @@ export function VehicleCard({
                               size='icon'
                               className={cn(
                                 'h-8 w-8 text-muted-foreground hover:text-foreground',
-                                'focus-visible:ring-2 focus-visible:ring-ring'
+                                'transition-opacity duration-150',
+                                isHovered ? 'opacity-100' : 'opacity-0',
+                                'focus-visible:opacity-100'
                               )}
-                              aria-label='Open actions menu'
+                              aria-label='More actions'
                             >
                               <MoreHorizontal className='h-4 w-4' />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align='end' className='w-48' onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewDetails() }}>
+                              <FileText className='mr-2 h-4 w-4' />
+                              View Details
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onGenerateInvoice() }}>
                               <FileText className='mr-2 h-4 w-4' />
-                              Generate Invoice
+                              Download Invoice
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRecordPayment() }}>
                               <CreditCard className='mr-2 h-4 w-4' />
                               Record Payment
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onManageDocuments() }}>
                               <FileText className='mr-2 h-4 w-4' />
                               Manage Documents
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onUploadDocuments() }}>
-                              <FileText className='mr-2 h-4 w-4' />
-                              Upload Documents
                             </DropdownMenuItem>
                             {auction.paymentStatus === 'completed' && auction.status !== 'shipping' && (
                               <>
@@ -366,17 +399,18 @@ export function VehicleCard({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side='left'>
-                      <p>Actions</p>
+                      <p>More actions</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
               </div>
 
-              {/* Data Grid */}
-              <div className='grid grid-cols-6 gap-x-6 gap-y-2'>
+              {/* Data Grid - 2 rows */}
+              <div className='grid grid-cols-7 gap-x-6 gap-y-3'>
+                {/* Row 1 */}
                 {/* Mileage */}
                 <div className='space-y-0.5'>
-                  <p className='text-[10px] uppercase tracking-wider text-muted-foreground font-medium'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
                     Mileage
                   </p>
                   <p className='text-sm font-medium tabular-nums'>
@@ -386,60 +420,93 @@ export function VehicleCard({
 
                 {/* Color */}
                 <div className='space-y-0.5'>
-                  <p className='text-[10px] uppercase tracking-wider text-muted-foreground font-medium'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
                     Color
                   </p>
-                  <p className='text-sm font-medium truncate'>{auction.vehicleInfo.color}</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p className='text-sm font-medium truncate cursor-default'>
+                        {auction.vehicleInfo.color}
+                      </p>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{auction.vehicleInfo.color}</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
 
-                {/* Won Date */}
+                {/* Winning Bid */}
                 <div className='space-y-0.5'>
-                  <p className='text-[10px] uppercase tracking-wider text-muted-foreground font-medium'>
-                    Won Date
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Winning Bid
                   </p>
-                  <p className='text-sm font-medium'>
-                    {format(new Date(auction.auctionEndDate), 'MMM d, yyyy')}
+                  <p className='text-sm font-medium tabular-nums'>
+                    ¥{auction.winningBid.toLocaleString()}
                   </p>
                 </div>
 
-                {/* Payment Progress with visual bar */}
-                <div className='space-y-1'>
-                  <div className='flex items-center justify-between'>
-                    <p className='text-[10px] uppercase tracking-wider text-muted-foreground font-medium'>
-                      Paid
-                    </p>
-                    <span className='text-[10px] font-medium tabular-nums'>{paymentProgress}%</span>
-                  </div>
-                  <Progress
-                    value={paymentProgress}
-                    className='h-1.5'
-                    aria-label={`Payment progress: ${paymentProgress}% paid`}
-                  />
-                </div>
-
-                {/* Total + Due as badge */}
+                {/* Shipping */}
                 <div className='space-y-0.5'>
-                  <p className='text-[10px] uppercase tracking-wider text-muted-foreground font-medium'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Shipping
+                  </p>
+                  <p className='text-sm font-medium tabular-nums'>
+                    ¥{auction.shippingCost.toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Total Amount */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
                     Total
                   </p>
-                  <div className='flex items-center gap-2'>
-                    <p className='text-sm font-semibold tabular-nums'>
-                      ¥{auction.totalAmount.toLocaleString()}
+                  <p className='text-sm font-semibold tabular-nums'>
+                    ¥{auction.totalAmount.toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Payment Progress */}
+                <div className='space-y-1'>
+                  <div className='flex items-center justify-between'>
+                    <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                      Paid
                     </p>
-                    {outstandingBalance > 0 && (
-                      <Badge
-                        variant='outline'
-                        className='px-1.5 py-0 text-[10px] font-medium bg-orange-50 text-orange-700 border-orange-200'
-                      >
-                        Due ¥{outstandingBalance.toLocaleString()}
-                      </Badge>
-                    )}
+                    <div className='flex items-center gap-1'>
+                      {paymentProgress === 100 && (
+                        <CheckCircle2 className='h-3 w-3 text-muted-foreground' />
+                      )}
+                      <span className='text-[11px] font-medium tabular-nums'>{paymentProgress}%</span>
+                    </div>
+                  </div>
+                  <div className='h-1.5 w-full bg-muted/50 rounded-full overflow-hidden'>
+                    <div
+                      className='h-full bg-foreground/70 rounded-full transition-all duration-300'
+                      style={{ width: `${paymentProgress}%` }}
+                    />
                   </div>
                 </div>
 
-                {/* Destination Port */}
+                {/* Outstanding / Paid Status */}
                 <div className='space-y-0.5'>
-                  <p className='text-[10px] uppercase tracking-wider text-muted-foreground font-medium'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Balance
+                  </p>
+                  {outstandingBalance > 0 ? (
+                    <p className='text-sm font-medium tabular-nums text-muted-foreground'>
+                      ¥{outstandingBalance.toLocaleString()}
+                    </p>
+                  ) : (
+                    <p className='text-sm font-medium text-muted-foreground flex items-center gap-1'>
+                      <CheckCircle2 className='h-3 w-3' />
+                      Cleared
+                    </p>
+                  )}
+                </div>
+
+                {/* Row 2 */}
+                {/* Destination */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
                     Destination
                   </p>
                   {auction.destinationPort ? (
@@ -457,6 +524,95 @@ export function VehicleCard({
                   ) : (
                     <p className='text-sm text-muted-foreground'>—</p>
                   )}
+                </div>
+
+                {/* Documents */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Documents
+                  </p>
+                  <p className='text-sm font-medium flex items-center gap-1'>
+                    <FileCheck className='h-3 w-3 text-muted-foreground' />
+                    {documentsCount} uploaded
+                  </p>
+                </div>
+
+                {/* Payments */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Payments
+                  </p>
+                  <p className='text-sm font-medium flex items-center gap-1'>
+                    <Banknote className='h-3 w-3 text-muted-foreground' />
+                    {paymentsCount} recorded
+                  </p>
+                </div>
+
+                {/* Carrier / Shipping Info */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Carrier
+                  </p>
+                  {auction.shipment ? (
+                    <p className='text-sm font-medium truncate flex items-center gap-1'>
+                      <Anchor className='h-3 w-3 text-muted-foreground' />
+                      {auction.shipment.carrier}
+                    </p>
+                  ) : (
+                    <p className='text-sm text-muted-foreground'>—</p>
+                  )}
+                </div>
+
+                {/* ETA */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    ETA
+                  </p>
+                  {auction.shipment?.estimatedDelivery ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className='text-sm font-medium cursor-default'>
+                          {format(new Date(auction.shipment.estimatedDelivery), 'MMM d')}
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{format(new Date(auction.shipment.estimatedDelivery), 'MMMM d, yyyy')}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <p className='text-sm text-muted-foreground'>—</p>
+                  )}
+                </div>
+
+                {/* Tracking */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Tracking
+                  </p>
+                  {auction.shipment?.trackingNumber ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className='text-sm font-mono font-medium truncate cursor-default'>
+                          {auction.shipment.trackingNumber.slice(0, 10)}...
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{auction.shipment.trackingNumber}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <p className='text-sm text-muted-foreground'>—</p>
+                  )}
+                </div>
+
+                {/* Time Since Won */}
+                <div className='space-y-0.5'>
+                  <p className='text-[11px] text-muted-foreground uppercase tracking-wide'>
+                    Age
+                  </p>
+                  <p className='text-sm font-medium text-muted-foreground'>
+                    {formatDistanceToNow(new Date(auction.auctionEndDate), { addSuffix: false })}
+                  </p>
                 </div>
               </div>
             </div>

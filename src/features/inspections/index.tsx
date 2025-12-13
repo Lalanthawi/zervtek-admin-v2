@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Search,
   Send,
-  Shield,
   Trash2,
   User,
   Users,
@@ -294,9 +293,6 @@ export function Inspections() {
                   <div className='flex items-start justify-between'>
                     <div className='flex-1 space-y-3'>
                       <div className='flex items-start gap-3'>
-                        <div className='p-2 rounded-lg bg-blue-50'>
-                          <Shield className='h-5 w-5 text-blue-600' />
-                        </div>
                         <div className='flex-1'>
                           <div className='flex items-center gap-2 flex-wrap'>
                             <span className='text-xs text-muted-foreground'>{request.requestId}</span>

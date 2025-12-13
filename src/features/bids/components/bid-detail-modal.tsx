@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -21,16 +21,29 @@ import {
   CircleSlash,
   XCircle,
   Ban,
-  FileQuestion,
   HelpCircle,
   Check,
   UserCog,
   Car,
+  ChevronLeft,
+  ChevronRight,
+  Images,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +68,7 @@ interface BidDetailModalProps {
   onAuctionCancelled?: (bid: Bid) => void
   onIncreaseBid?: (bid: Bid) => void
   onCreateInvoice?: (bid: Bid) => void
+  onViewCustomer?: (bid: Bid) => void
   loading?: boolean
 }
 
@@ -173,10 +187,19 @@ export function BidDetailModal({
   onAuctionCancelled,
   onIncreaseBid,
   onCreateInvoice,
+  onViewCustomer,
   loading = false,
 }: BidDetailModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+
+  // Reset image index when bid changes
+  useEffect(() => {
+    if (bid) {
+      setCurrentImageIndex(0)
+    }
+  }, [bid?.id])
 
   // Handle ESC key
   useEffect(() => {
@@ -291,87 +314,101 @@ export function BidDetailModal({
                 </div>
               ) : bid ? (
                 <>
-                  {/* Header with vehicle image */}
-                  <div className="relative h-48 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900">
-                    {bid.vehicle.thumbnailImage && bid.vehicle.thumbnailImage !== '#' ? (
-                      <img
-                        src={bid.vehicle.thumbnailImage}
-                        alt={`${bid.vehicle.year} ${bid.vehicle.make} ${bid.vehicle.model}`}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <Car className="h-20 w-20 text-muted-foreground/30" />
+                  {/* Header with vehicle image gallery */}
+                  <div className="relative bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900">
+                    {/* Main image */}
+                    <div className="relative h-48">
+                      {bid.vehicle.images && bid.vehicle.images.length > 0 ? (
+                        <>
+                          <img
+                            src={bid.vehicle.images[currentImageIndex]}
+                            alt={`${bid.vehicle.year} ${bid.vehicle.make} ${bid.vehicle.model} - Image ${currentImageIndex + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                          {/* Navigation arrows */}
+                          {bid.vehicle.images.length > 1 && (
+                            <>
+                              <button
+                                onClick={() => setCurrentImageIndex((prev) => (prev - 1 + bid.vehicle.images.length) % bid.vehicle.images.length)}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                                aria-label="Previous image"
+                              >
+                                <ChevronLeft className="h-5 w-5" />
+                              </button>
+                              <button
+                                onClick={() => setCurrentImageIndex((prev) => (prev + 1) % bid.vehicle.images.length)}
+                                className="absolute right-12 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+                                aria-label="Next image"
+                              >
+                                <ChevronRight className="h-5 w-5" />
+                              </button>
+                            </>
+                          )}
+                          {/* Image counter */}
+                          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white backdrop-blur-sm">
+                            <Images className="h-3.5 w-3.5" />
+                            <span>{currentImageIndex + 1} / {bid.vehicle.images.length}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Car className="h-20 w-20 text-muted-foreground/30" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Thumbnail strip */}
+                    {bid.vehicle.images && bid.vehicle.images.length > 1 && (
+                      <div className="flex gap-1 overflow-x-auto p-2 bg-black/10 dark:bg-white/5">
+                        {bid.vehicle.images.map((img, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setCurrentImageIndex(idx)}
+                            className={cn(
+                              "flex-shrink-0 h-12 w-16 rounded overflow-hidden border-2 transition-all",
+                              currentImageIndex === idx
+                                ? "border-primary ring-1 ring-primary"
+                                : "border-transparent opacity-60 hover:opacity-100"
+                            )}
+                          >
+                            <img
+                              src={img}
+                              alt={`Thumbnail ${idx + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                          </button>
+                        ))}
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-
-                    {/* Header content */}
-                    <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-                      <div className="flex items-end justify-between">
-                        <div>
-                          <p className="text-sm font-medium opacity-90 mb-1">
-                            {bid.auctionHouse} • Lot #{bid.lotNumber}
-                          </p>
-                          <h2 id="bid-detail-title" className="text-xl font-bold">
-                            {bid.vehicle.year} {bid.vehicle.make} {bid.vehicle.model}
-                          </h2>
-                          <p className="text-sm opacity-80 font-mono mt-1">{bid.vehicle.chassisNumber}</p>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <Badge variant="outline" className={cn('text-xs', statusStyles[bid.status])}>
-                            {statusLabels[bid.status]}
-                          </Badge>
-                          <Badge variant="outline" className={cn('text-xs', auctionStatusStyles[bid.auctionStatus])}>
-                            {bid.auctionStatus.charAt(0).toUpperCase() + bid.auctionStatus.slice(1)}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
                   </div>
 
                   {/* Bid amount highlight */}
                   <div className="border-b border-border/50 bg-muted/30 px-6 py-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Your Bid</p>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</p>
                         <p className="text-3xl font-bold tracking-tight mt-1">
                           ¥{bid.amount.toLocaleString()}
                         </p>
-                        {bid.status === 'winning' && (
-                          <div className="flex items-center gap-1.5 mt-2 text-emerald-600">
-                            <TrendingUp className="h-4 w-4" />
-                            <span className="text-sm font-medium">Currently Leading</span>
-                          </div>
-                        )}
-                        {bid.status === 'outbid' && (
-                          <div className="flex items-center gap-1.5 mt-2 text-orange-600">
-                            <TrendingDown className="h-4 w-4" />
-                            <span className="text-sm font-medium">
-                              Outbid by ¥{(bid.currentHighBid - bid.amount).toLocaleString()}
-                            </span>
-                          </div>
-                        )}
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Current High</p>
-                        <p className="text-2xl font-semibold text-muted-foreground mt-1">
-                          ¥{bid.currentHighBid.toLocaleString()}
-                        </p>
-                        {bid.timeRemaining && bid.auctionStatus === 'live' && (
-                          <div className="flex items-center justify-end gap-1.5 mt-2 text-orange-600">
-                            <Clock className="h-4 w-4" />
-                            <span className="text-sm font-medium">{getTimeRemaining(bid.timeRemaining)}</span>
-                          </div>
-                        )}
-                      </div>
+                      <Badge variant="outline" className={cn('text-sm px-3 py-1', statusStyles[bid.status])}>
+                        {statusLabels[bid.status]}
+                      </Badge>
                     </div>
                   </div>
 
                   {/* Content */}
                   <div className="p-6 space-y-6">
-                    {/* Bidder Card */}
-                    <div className="flex items-center gap-4 rounded-xl border border-border/50 bg-card/50 p-4">
+                    {/* Bidder Card - Clickable */}
+                    <button
+                      onClick={() => onViewCustomer?.(bid)}
+                      className={cn(
+                        "w-full flex items-center gap-4 rounded-xl border border-border/50 bg-card/50 p-4 text-left",
+                        "transition-all duration-200",
+                        "hover:bg-muted/50 hover:border-border hover:shadow-sm",
+                        "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      )}
+                    >
                       <Avatar className="h-12 w-12 border-2 border-border/50">
                         <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                           {getInitials(bid.bidder.name)}
@@ -403,10 +440,10 @@ export function BidDetailModal({
                           {bid.bidder.depositAmount > 0 ? `¥${bid.bidder.depositAmount.toLocaleString()}` : '—'}
                         </p>
                       </div>
-                    </div>
+                    </button>
 
-                    {/* Details Grid */}
-                    <div className="grid gap-4 md:grid-cols-2">
+                    {/* Details Grid - Two Column Layout */}
+                    <div className="grid gap-4 grid-cols-2">
                       {/* Bid Details */}
                       <div className="rounded-xl border border-border/50 bg-card/50 p-4">
                         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
@@ -426,30 +463,15 @@ export function BidDetailModal({
                           {bid.type === 'assisted' && bid.assistedBy && (
                             <StatItem label="Assisted By" value={bid.assistedBy} />
                           )}
-                          {bid.previousBid && (
-                            <StatItem label="Previous Bid" value={`¥${bid.previousBid.toLocaleString()}`} />
-                          )}
                           <StatItem label="Placed" value={format(bid.timestamp, 'MMM d, yyyy h:mm a')} />
-                        </div>
-                      </div>
-
-                      {/* Auction Info */}
-                      <div className="rounded-xl border border-border/50 bg-card/50 p-4">
-                        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                          Auction Info
-                        </h3>
-                        <div className="space-y-1 divide-y divide-border/50">
                           <StatItem
-                            label="Status"
+                            label="Auction Status"
                             value={
                               <Badge variant="outline" className={cn('text-xs', auctionStatusStyles[bid.auctionStatus])}>
                                 {bid.auctionStatus.charAt(0).toUpperCase() + bid.auctionStatus.slice(1)}
                               </Badge>
                             }
                           />
-                          <StatItem label="Total Bids" value={bid.totalBids.toString()} />
-                          <StatItem label="Auction House" value={bid.auctionHouse} />
-                          <StatItem label="Lot Number" value={`#${bid.lotNumber}`} />
                           {bid.timeRemaining && bid.auctionStatus === 'live' && (
                             <StatItem
                               label="Ends In"
@@ -464,17 +486,20 @@ export function BidDetailModal({
                           )}
                         </div>
                       </div>
-                    </div>
 
-                    {/* Notes */}
-                    {bid.notes && (
+                      {/* Auction Info */}
                       <div className="rounded-xl border border-border/50 bg-card/50 p-4">
-                        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                          Notes
+                        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                          Auction Info
                         </h3>
-                        <p className="text-sm">{bid.notes}</p>
+                        <div className="space-y-1 divide-y divide-border/50">
+                          <StatItem label="Vehicle" value={`${bid.vehicle.year} ${bid.vehicle.make} ${bid.vehicle.model}`} />
+                          <StatItem label="Auction House" value={bid.auctionHouse} />
+                          <StatItem label="Lot Number" value={`#${bid.lotNumber}`} />
+                          <StatItem label="Date" value={format(bid.timestamp, 'MMM d, yyyy')} />
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* Footer Actions */}
@@ -483,22 +508,63 @@ export function BidDetailModal({
                       {/* Pending Approval Actions */}
                       {isPendingApproval && (
                         <>
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700"
-                            onClick={() => onApprove?.(bid)}
-                          >
-                            <Check className="mr-2 h-4 w-4" />
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => onDecline?.(bid)}
-                          >
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Decline
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700"
+                              >
+                                <Check className="mr-2 h-4 w-4" />
+                                Approve
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Approve Bid</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to approve this bid of ¥{bid.amount.toLocaleString()} for {bid.vehicle.year} {bid.vehicle.make} {bid.vehicle.model}?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-emerald-600 hover:bg-emerald-700"
+                                  onClick={() => onApprove?.(bid)}
+                                >
+                                  Approve
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Decline
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Decline Bid</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to decline this bid of ¥{bid.amount.toLocaleString()} for {bid.vehicle.year} {bid.vehicle.make} {bid.vehicle.model}? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive hover:bg-destructive/90"
+                                  onClick={() => onDecline?.(bid)}
+                                >
+                                  Decline
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </>
                       )}
 
@@ -555,10 +621,6 @@ export function BidDetailModal({
                               <DropdownMenuItem onClick={() => onAuctionCancelled?.(bid)}>
                                 <Ban className="mr-2 h-4 w-4" />
                                 Auction Cancelled
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <FileQuestion className="mr-2 h-4 w-4" />
-                                Result
                               </DropdownMenuItem>
                               <DropdownMenuItem>
                                 <HelpCircle className="mr-2 h-4 w-4" />

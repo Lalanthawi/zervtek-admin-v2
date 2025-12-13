@@ -22,6 +22,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -86,6 +96,8 @@ import { toast } from 'sonner'
 import { bids as initialBids, type Bid } from './data/bids'
 import { CreateInvoiceDrawer } from './components/create-invoice-drawer'
 import { BidDetailModal } from './components/bid-detail-modal'
+import { CustomerProfileModal } from '@/features/customers/components/customer-profile-modal'
+import { type Customer, type UserLevel } from '@/features/customers/data/customers'
 
 export function Bids() {
   const [bids] = useState(initialBids)
@@ -128,6 +140,15 @@ export function Bids() {
   const [wonBid, setWonBid] = useState<Bid | null>(null)
   const [wonPrice, setWonPrice] = useState('')
   const [wonType, setWonType] = useState<'bid_accepted' | 'contract' | 'contract_nego'>('bid_accepted')
+
+  // Customer modal state
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+
+  // Approve/Decline confirmation dialogs
+  const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
+  const [isDeclineDialogOpen, setIsDeclineDialogOpen] = useState(false)
+  const [pendingActionBid, setPendingActionBid] = useState<Bid | null>(null)
 
   // Get unique values for filters
   const uniqueStatuses: Bid['status'][] = ['pending_approval', 'active', 'outbid', 'winning', 'won', 'lost', 'retracted', 'expired', 'declined']
@@ -372,6 +393,37 @@ export function Bids() {
       setWonBid(null)
       setWonPrice('')
     }
+  }
+
+  // Handle view customer from bid
+  const handleViewCustomer = (bid: Bid) => {
+    // Convert bidder to Customer object for the modal
+    const customer: Customer = {
+      id: bid.bidder.id,
+      name: bid.bidder.name,
+      email: bid.bidder.email,
+      phone: '',
+      country: bid.bidder.location,
+      city: '',
+      address: '',
+      status: 'active',
+      totalPurchases: 0,
+      totalSpent: 0,
+      totalBids: 0,
+      wonAuctions: 0,
+      lostAuctions: 0,
+      activeBids: 0,
+      verificationStatus: bid.bidder.level === 'verified' || bid.bidder.level === 'premium' || bid.bidder.level === 'business' || bid.bidder.level === 'business_premium' ? 'verified' : 'pending',
+      depositAmount: bid.bidder.depositAmount,
+      outstandingBalance: 0,
+      userLevel: bid.bidder.level as UserLevel,
+      preferredLanguage: 'en',
+      tags: [],
+      createdAt: new Date(),
+      lastActivity: new Date(),
+    }
+    setSelectedCustomer(customer)
+    setIsCustomerModalOpen(true)
   }
 
   return (
@@ -825,7 +877,8 @@ export function Bids() {
                                 className='text-green-600'
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  toast.success(`Bid ${bid.bidNumber} approved`)
+                                  setPendingActionBid(bid)
+                                  setIsApproveDialogOpen(true)
                                 }}
                               >
                                 <Check className='mr-2 h-4 w-4' />
@@ -835,7 +888,8 @@ export function Bids() {
                                 className='text-red-600'
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  toast.success(`Bid ${bid.bidNumber} declined`)
+                                  setPendingActionBid(bid)
+                                  setIsDeclineDialogOpen(true)
                                 }}
                               >
                                 <XCircle className='mr-2 h-4 w-4' />
@@ -1154,6 +1208,26 @@ export function Bids() {
           setIsViewBidModalOpen(false)
         }}
         onCreateInvoice={() => setIsCreateInvoiceOpen(true)}
+        onViewCustomer={handleViewCustomer}
+      />
+
+      {/* Customer Profile Modal */}
+      <CustomerProfileModal
+        customer={selectedCustomer}
+        open={isCustomerModalOpen}
+        onClose={() => setIsCustomerModalOpen(false)}
+        onSendEmail={(customer) => {
+          toast.success(`Email sent to ${customer.email}`)
+        }}
+        onCallCustomer={(customer) => {
+          toast.success(`Calling ${customer.name}`)
+        }}
+        onVerifyCustomer={(customer) => {
+          toast.success(`${customer.name} verification updated`)
+        }}
+        onChangeUserLevel={(customer, level) => {
+          toast.success(`${customer.name} level changed to ${level}`)
+        }}
       />
 
       {/* Create Invoice Drawer */}
@@ -1340,6 +1414,66 @@ export function Bids() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Approve Bid Confirmation */}
+      <AlertDialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve Bid</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingActionBid && (
+                <>
+                  Are you sure you want to approve this bid of ¥{pendingActionBid.amount.toLocaleString()} for {pendingActionBid.vehicle.year} {pendingActionBid.vehicle.make} {pendingActionBid.vehicle.model}?
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className='bg-emerald-600 hover:bg-emerald-700'
+              onClick={() => {
+                if (pendingActionBid) {
+                  toast.success(`Bid ${pendingActionBid.bidNumber} approved`)
+                }
+                setPendingActionBid(null)
+              }}
+            >
+              Approve
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Decline Bid Confirmation */}
+      <AlertDialog open={isDeclineDialogOpen} onOpenChange={setIsDeclineDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Decline Bid</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingActionBid && (
+                <>
+                  Are you sure you want to decline this bid of ¥{pendingActionBid.amount.toLocaleString()} for {pendingActionBid.vehicle.year} {pendingActionBid.vehicle.make} {pendingActionBid.vehicle.model}? This action cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className='bg-destructive hover:bg-destructive/90'
+              onClick={() => {
+                if (pendingActionBid) {
+                  toast.success(`Bid ${pendingActionBid.bidNumber} declined`)
+                }
+                setPendingActionBid(null)
+              }}
+            >
+              Decline
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
