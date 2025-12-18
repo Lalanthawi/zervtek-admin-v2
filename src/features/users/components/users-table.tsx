@@ -13,6 +13,7 @@ import {
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
+import { Users } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -21,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { EmptyState } from '@/components/empty-state'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
 import { roles } from '../data/data'
 import { type User } from '../data/schema'
@@ -175,12 +177,17 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
                 </TableRow>
               ))
             ) : (
-              <TableRow>
+              <TableRow className='hover:bg-transparent'>
                 <TableCell
                   colSpan={columns.length}
-                  className='h-24 text-center'
+                  className='h-48'
                 >
-                  No results.
+                  <EmptyState
+                    icon={Users}
+                    title='No users found'
+                    description='Try adjusting your filters or invite a new user to get started.'
+                    size='sm'
+                  />
                 </TableCell>
               </TableRow>
             )}

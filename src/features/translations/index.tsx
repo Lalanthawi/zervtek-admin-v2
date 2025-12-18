@@ -1,26 +1,28 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import {
   CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  FileText,
-  Filter,
   Languages,
-  LayoutGrid,
-  List,
-  MoreHorizontal,
-  RefreshCw,
-  Search,
-  Send,
-  Trash2,
-  User,
-  Users,
+  Save,
   Zap,
   FileCheck,
+  ClipboardList,
+  UserPlus,
+  User,
+  Users,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Maximize2,
+  Car,
+  ChevronLeft,
+  ChevronRight,
+  Gauge,
+  Calendar,
+  Palette,
+  Hash,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -30,28 +32,6 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -63,21 +43,34 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { Search } from '@/components/search'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog'
 
-import { requests as allRequests, type ServiceRequest, type RequestThread } from '../requests/data/requests'
-import { StatsCard } from '@/features/dashboard/components/stats-card'
+import { requests as allRequests, type ServiceRequest } from '../requests/data/requests'
+import { auctions, type Auction } from '../auctions/data/auctions'
+import { AssignTranslatorDrawer } from './components/assign-translator-drawer'
 import { cn } from '@/lib/utils'
 
-const CURRENT_ADMIN_ID = 'admin1'
-const CURRENT_ADMIN_NAME = 'Current Admin'
+// Create auction lookup map
+const auctionMap = new Map(auctions.map(a => [a.id, a]))
+
+// Get auction for a request
+const getAuctionForRequest = (request: ServiceRequest): Auction | undefined => {
+  if (!request.auctionId) return undefined
+  return auctionMap.get(request.auctionId)
+}
+
+const CURRENT_USER_ID = 'admin1'
+const CURRENT_USER_NAME = 'Current Admin'
+// Simulated current user role - in real app, this comes from auth context
+// 'admin' | 'manager' | 'superadmin' can assign others
+// 'cashier' can only assign to themselves
+const CURRENT_USER_ROLE: 'superadmin' | 'admin' | 'manager' | 'cashier' = 'admin'
+
+const canAssignOthers = ['superadmin', 'admin', 'manager'].includes(CURRENT_USER_ROLE)
 
 // Filter to only translation requests
 const initialRequests = allRequests.filter(r => r.type === 'translation')
@@ -86,142 +79,207 @@ type TranslationType = 'all' | 'auction_sheet' | 'export_certificate'
 
 export function Translations() {
   const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests)
-  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null)
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(initialRequests[0] || null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [newMessage, setNewMessage] = useState('')
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false)
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
-  const [itemsPerPage, setItemsPerPage] = useState(10)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [statusFilters, setStatusFilters] = useState<string[]>([])
-  const [priorityFilters, setPriorityFilters] = useState<string[]>([])
+  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [translationType, setTranslationType] = useState<TranslationType>('all')
+  const [showMyTasks, setShowMyTasks] = useState(false)
+
+  // Translation editor state
+  const [translationText, setTranslationText] = useState('')
+  const [imageZoom, setImageZoom] = useState(100)
+  const [imageRotation, setImageRotation] = useState(0)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [assignDrawerOpen, setAssignDrawerOpen] = useState(false)
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
+
+  // Get auction for selected request
+  const selectedAuction = selectedRequest ? getAuctionForRequest(selectedRequest) : undefined
+  const vehicleImages = selectedAuction?.vehicleInfo.images || []
+
+  // Compute counts for tabs
+  const counts = useMemo(() => {
+    const all = requests.length
+    const auctionSheet = requests.filter(r => r.title.includes('Auction Sheet')).length
+    const exportCert = requests.filter(r => r.title.includes('Export Certificate')).length
+    const myTasks = requests.filter(r => r.assignedTo === CURRENT_USER_ID).length
+    return { all, auctionSheet, exportCert, myTasks }
+  }, [requests])
 
   const filteredRequests = useMemo(() => {
     return requests.filter((request) => {
       const matchesSearch =
         request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         request.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         request.requestId.toLowerCase().includes(searchQuery.toLowerCase())
 
-      const matchesStatus = statusFilters.length === 0 || statusFilters.includes(request.status)
-      const matchesPriority = priorityFilters.length === 0 || priorityFilters.includes(request.priority)
+      const matchesStatus = statusFilter === 'all' || request.status === statusFilter
 
       const matchesType = translationType === 'all' ||
         (translationType === 'auction_sheet' && request.title.includes('Auction Sheet')) ||
         (translationType === 'export_certificate' && request.title.includes('Export Certificate'))
 
-      return matchesSearch && matchesStatus && matchesPriority && matchesType
+      const matchesMyTasks = !showMyTasks || request.assignedTo === CURRENT_USER_ID
+
+      return matchesSearch && matchesStatus && matchesType && matchesMyTasks
     })
-  }, [requests, searchQuery, statusFilters, priorityFilters, translationType])
+  }, [requests, searchQuery, statusFilter, translationType, showMyTasks])
 
-  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage)
+  // Pagination logic
+  const totalPages = Math.ceil(filteredRequests.length / ITEMS_PER_PAGE)
   const paginatedRequests = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage
-    return filteredRequests.slice(startIndex, startIndex + itemsPerPage)
-  }, [filteredRequests, currentPage, itemsPerPage])
+    return filteredRequests.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    )
+  }, [filteredRequests, currentPage, ITEMS_PER_PAGE])
 
-  const stats = useMemo(() => {
-    const auctionSheetRequests = requests.filter(r => r.title.includes('Auction Sheet'))
-    const exportCertRequests = requests.filter(r => r.title.includes('Export Certificate'))
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, statusFilter, translationType, showMyTasks])
 
-    return {
-      total: requests.length,
-      auctionSheet: auctionSheetRequests.length,
-      exportCertificate: exportCertRequests.length,
-      pending: requests.filter((r) => r.status === 'pending').length,
-      inProgress: requests.filter((r) => r.status === 'in_progress' || r.status === 'assigned').length,
-      completed: requests.filter((r) => r.status === 'completed').length,
-    }
-  }, [requests])
-
-  const handleCardClick = (request: ServiceRequest) => {
+  const handleSelectRequest = (request: ServiceRequest) => {
     setSelectedRequest(request)
-    setIsDetailsOpen(true)
+    // Load existing translation if any (in real app, this would come from the request data)
+    setTranslationText('')
+    setImageZoom(100)
+    setImageRotation(0)
+    setSelectedImageIndex(0)
   }
 
-  const handleAssignToMe = (request: ServiceRequest, e?: React.MouseEvent) => {
-    e?.stopPropagation()
-    setRequests(requests.map((r) =>
+  const handleAssignToMe = (request: ServiceRequest) => {
+    const updated = requests.map((r) =>
       r.id === request.id
-        ? { ...r, assignedTo: CURRENT_ADMIN_ID, assignedToName: CURRENT_ADMIN_NAME, status: 'assigned' as const }
+        ? { ...r, assignedTo: CURRENT_USER_ID, assignedToName: CURRENT_USER_NAME, status: 'assigned' as const }
         : r
-    ))
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...request, assignedTo: CURRENT_USER_ID, assignedToName: CURRENT_USER_NAME, status: 'assigned' })
     toast.success(`Request ${request.requestId} assigned to you`)
   }
 
-  const handleStatusUpdate = (request: ServiceRequest, newStatus: ServiceRequest['status']) => {
-    setRequests(requests.map((r) =>
-      r.id === request.id
-        ? { ...r, status: newStatus, updatedAt: new Date(), completedAt: newStatus === 'completed' ? new Date() : r.completedAt }
-        : r
-    ))
-    toast.success(`Request status updated to ${newStatus.replace('_', ' ')}`)
-  }
-
-  const handleSendMessage = () => {
-    if (!selectedRequest || !newMessage.trim()) return
-    const newThread: RequestThread = {
-      id: String(Date.now()),
-      sender: CURRENT_ADMIN_NAME,
-      senderType: 'admin',
-      message: newMessage,
-      timestamp: new Date(),
-    }
-    setRequests(requests.map((r) =>
+  const handleAssignStaff = (staffId: string, staffName: string) => {
+    if (!selectedRequest) return
+    const updated = requests.map((r) =>
       r.id === selectedRequest.id
-        ? { ...r, threads: [...r.threads, newThread], updatedAt: new Date() }
+        ? { ...r, assignedTo: staffId, assignedToName: staffName, status: 'assigned' as const }
         : r
-    ))
-    setSelectedRequest({ ...selectedRequest, threads: [...selectedRequest.threads, newThread] })
-    setNewMessage('')
-    toast.success('Message sent')
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...selectedRequest, assignedTo: staffId, assignedToName: staffName, status: 'assigned' })
   }
 
+  const handleSaveDraft = () => {
+    if (!selectedRequest || !translationText.trim()) return
+    toast.success('Translation draft saved')
+  }
+
+  const handleStartTranslation = () => {
+    if (!selectedRequest) return
+    const updated = requests.map((r) =>
+      r.id === selectedRequest.id
+        ? { ...r, status: 'in_progress' as const, updatedAt: new Date() }
+        : r
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...selectedRequest, status: 'in_progress', updatedAt: new Date() })
+    toast.success('Translation started')
+  }
+
+  const handleCompleteTranslation = () => {
+    if (!selectedRequest || !translationText.trim()) {
+      toast.error('Please enter the translation before completing')
+      return
+    }
+    const updated = requests.map((r) =>
+      r.id === selectedRequest.id
+        ? { ...r, status: 'completed' as const, updatedAt: new Date(), completedAt: new Date() }
+        : r
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...selectedRequest, status: 'completed', updatedAt: new Date(), completedAt: new Date() })
+    toast.success('Translation completed and sent to customer')
+  }
+
+  // Priority colors
   const getPriorityColor = (priority: ServiceRequest['priority']) => {
     const colors = {
-      urgent: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800',
-      high: 'text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-950 dark:border-orange-800',
-      medium: 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800',
-      low: 'text-green-600 bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800',
+      urgent: 'bg-red-500',
+      high: 'bg-orange-500',
+      medium: 'bg-amber-500',
+      low: 'bg-slate-400',
     }
     return colors[priority]
   }
 
-  const getStatusColor = (status: ServiceRequest['status']) => {
+  const getPriorityBadge = (priority: ServiceRequest['priority']) => {
     const colors = {
-      completed: 'text-green-600 bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800',
-      in_progress: 'text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800',
-      assigned: 'text-purple-600 bg-purple-50 border-purple-200 dark:bg-purple-950 dark:border-purple-800',
-      pending: 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800',
-      cancelled: 'text-gray-600 bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700',
+      urgent: 'bg-red-500/10 text-red-400 border-red-500/20',
+      high: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+      medium: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      low: 'bg-muted text-muted-foreground border-transparent',
+    }
+    return colors[priority]
+  }
+
+  const getStatusBadge = (status: ServiceRequest['status']) => {
+    const colors = {
+      completed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+      in_progress: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
+      assigned: 'bg-violet-500/15 text-violet-400 border-violet-500/20',
+      pending: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+      cancelled: 'bg-muted text-muted-foreground border-transparent',
     }
     return colors[status]
   }
 
   const getTypeIcon = (title: string) => {
     if (title.includes('Auction Sheet')) {
-      return <FileText className='h-5 w-5 text-blue-600' />
+      return <ClipboardList className='h-4 w-4' />
     }
-    return <FileCheck className='h-5 w-5 text-emerald-600' />
+    return <FileCheck className='h-4 w-4' />
   }
 
   const getTypeLabel = (title: string) => {
-    if (title.includes('Auction Sheet')) {
-      return 'Auction Sheet'
+    return title.includes('Auction Sheet') ? 'Auction Sheet' : 'Export Certificate'
+  }
+
+  const getRelativeTime = (date: Date) => {
+    const now = new Date()
+    const diffInHours = Math.floor((now.getTime() - new Date(date).getTime()) / (1000 * 60 * 60))
+    if (diffInHours < 1) return 'Just now'
+    if (diffInHours < 24) return `${diffInHours}h ago`
+    const diffInDays = Math.floor(diffInHours / 24)
+    if (diffInDays === 1) return 'Yesterday'
+    if (diffInDays < 7) return `${diffInDays}d ago`
+    return format(new Date(date), 'MMM dd')
+  }
+
+  // Get vehicle name from request
+  const getVehicleName = (request: ServiceRequest) => {
+    if (request.vehicleInfo) {
+      return `${request.vehicleInfo.year} ${request.vehicleInfo.make} ${request.vehicleInfo.model}`
     }
-    return 'Export Certificate'
+    return 'Unknown Vehicle'
   }
 
-  const clearFilters = () => {
-    setStatusFilters([])
-    setPriorityFilters([])
-    setSearchQuery('')
+  // Get vehicle thumbnail
+  const getVehicleThumbnail = (request: ServiceRequest) => {
+    const auction = getAuctionForRequest(request)
+    return auction?.vehicleInfo.images[0]
   }
 
-  const hasActiveFilters = statusFilters.length > 0 || priorityFilters.length > 0 || searchQuery
+  // Navigate images
+  const handlePrevImage = () => {
+    setSelectedImageIndex((prev) => (prev === 0 ? vehicleImages.length - 1 : prev - 1))
+  }
+
+  const handleNextImage = () => {
+    setSelectedImageIndex((prev) => (prev === vehicleImages.length - 1 ? 0 : prev + 1))
+  }
 
   return (
     <>
@@ -233,287 +291,535 @@ export function Translations() {
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+      <Main className='flex flex-1 flex-col gap-4 p-4 sm:p-6'>
         {/* Header */}
-        <div className='flex flex-wrap items-end justify-between gap-2'>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
           <div>
             <h2 className='text-2xl font-bold tracking-tight'>Translations</h2>
-            <p className='text-muted-foreground'>Manage document translation requests</p>
+            <p className='text-muted-foreground text-sm'>Translate auction documents for customers</p>
           </div>
-          <Button variant='outline' size='sm'>
-            <RefreshCw className='h-4 w-4 mr-2' />
-            Refresh
-          </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className='grid gap-4 md:grid-cols-4'>
-          <StatsCard title='Total Requests' value={stats.total} change={8} description='translation requests' />
-          <StatsCard title='Auction Sheet' value={stats.auctionSheet} change={12} description='before purchase' />
-          <StatsCard title='Export Certificate' value={stats.exportCertificate} change={5} description='after purchase' />
-          <StatsCard title='Pending' value={stats.pending} change={-3} description='awaiting action' />
-        </div>
-
-        {/* Type Tabs & Filters */}
-        <div className='flex flex-col gap-4'>
-          <Tabs value={translationType} onValueChange={(v) => setTranslationType(v as TranslationType)} className='w-full'>
-            <TabsList className='grid w-full grid-cols-3 lg:w-[400px]'>
-              <TabsTrigger value='all'>All</TabsTrigger>
-              <TabsTrigger value='auction_sheet'>Auction Sheet</TabsTrigger>
-              <TabsTrigger value='export_certificate'>Export Cert</TabsTrigger>
+        {/* Filters Row */}
+        <div className='flex flex-wrap items-center gap-3'>
+          <Tabs value={translationType} onValueChange={(v) => setTranslationType(v as TranslationType)}>
+            <TabsList>
+              <TabsTrigger value='all'>All ({counts.all})</TabsTrigger>
+              <TabsTrigger value='auction_sheet'>Auction Sheet ({counts.auctionSheet})</TabsTrigger>
+              <TabsTrigger value='export_certificate'>Export Cert ({counts.exportCert})</TabsTrigger>
             </TabsList>
           </Tabs>
 
-          <Collapsible open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-            <Card>
-              <CardContent className='p-4'>
-                <div className='flex flex-wrap gap-4 items-center'>
-                  <div className='relative flex-1 min-w-[200px]'>
-                    <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-                    <Input placeholder='Search by customer, request ID...' value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className='pl-10' />
-                  </div>
-                  <CollapsibleTrigger asChild>
-                    <Button variant='outline' size='sm'>
-                      <Filter className='h-4 w-4 mr-2' />
-                      Filters
-                      {hasActiveFilters && <Badge variant='secondary' className='ml-2'>{statusFilters.length + priorityFilters.length}</Badge>}
-                      {isFiltersOpen ? <ChevronUp className='h-4 w-4 ml-2' /> : <ChevronDown className='h-4 w-4 ml-2' />}
-                    </Button>
-                  </CollapsibleTrigger>
-                  {hasActiveFilters && <Button variant='ghost' size='sm' onClick={clearFilters}>Clear all</Button>}
-                  <div className='flex items-center gap-2'>
-                    <Button variant={viewMode === 'cards' ? 'secondary' : 'ghost'} size='sm' onClick={() => setViewMode('cards')}><LayoutGrid className='h-4 w-4' /></Button>
-                    <Button variant={viewMode === 'table' ? 'secondary' : 'ghost'} size='sm' onClick={() => setViewMode('table')}><List className='h-4 w-4' /></Button>
-                  </div>
-                </div>
-
-                <CollapsibleContent className='pt-4'>
-                  <div className='grid gap-6 md:grid-cols-2'>
-                    <div className='space-y-3'>
-                      <h4 className='text-sm font-medium'>Status</h4>
-                      <div className='space-y-2'>
-                        {['pending', 'assigned', 'in_progress', 'completed', 'cancelled'].map((status) => (
-                          <div key={status} className='flex items-center space-x-2'>
-                            <Checkbox id={`status-${status}`} checked={statusFilters.includes(status)} onCheckedChange={(checked) => {
-                              if (checked) setStatusFilters([...statusFilters, status])
-                              else setStatusFilters(statusFilters.filter((s) => s !== status))
-                            }} />
-                            <label htmlFor={`status-${status}`} className='text-sm'>
-                              <Badge className={`${getStatusColor(status as ServiceRequest['status'])} capitalize`}>{status.replace('_', ' ')}</Badge>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className='space-y-3'>
-                      <h4 className='text-sm font-medium'>Priority</h4>
-                      <div className='space-y-2'>
-                        {['urgent', 'high', 'medium', 'low'].map((priority) => (
-                          <div key={priority} className='flex items-center space-x-2'>
-                            <Checkbox id={`priority-${priority}`} checked={priorityFilters.includes(priority)} onCheckedChange={(checked) => {
-                              if (checked) setPriorityFilters([...priorityFilters, priority])
-                              else setPriorityFilters(priorityFilters.filter((p) => p !== priority))
-                            }} />
-                            <label htmlFor={`priority-${priority}`} className='text-sm'>
-                              <Badge className={`${getPriorityColor(priority as ServiceRequest['priority'])} capitalize`}>{priority}</Badge>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </CardContent>
-            </Card>
-          </Collapsible>
+          <div className='flex flex-1 items-center gap-2 justify-end'>
+            <Button
+              variant={showMyTasks ? 'secondary' : 'outline'}
+              size='sm'
+              onClick={() => setShowMyTasks(!showMyTasks)}
+              className='gap-1.5'
+            >
+              <User className='h-4 w-4' />
+              My Tasks
+              {counts.myTasks > 0 && (
+                <Badge variant='secondary' className='ml-1 h-5 min-w-5 px-1.5 text-xs'>
+                  {counts.myTasks}
+                </Badge>
+              )}
+            </Button>
+          </div>
         </div>
 
-        {/* Content */}
-        {viewMode === 'cards' ? (
-          <div className='space-y-4'>
-            {paginatedRequests.map((request) => (
-              <Card key={request.id} className='hover:shadow-md transition-shadow cursor-pointer' onClick={() => handleCardClick(request)}>
-                <CardContent className='p-4'>
-                  <div className='flex items-start justify-between'>
-                    <div className='flex-1 space-y-3'>
-                      <div className='flex items-start gap-3'>
-                        <div className={cn(
-                          'rounded-lg p-2 mt-0.5',
-                          request.title.includes('Auction Sheet')
-                            ? 'bg-blue-100 dark:bg-blue-950'
-                            : 'bg-emerald-100 dark:bg-emerald-950'
-                        )}>
-                          {getTypeIcon(request.title)}
-                        </div>
-                        <div className='flex-1'>
-                          <div className='flex items-center gap-2 flex-wrap'>
-                            <span className='text-xs text-muted-foreground'>{request.requestId}</span>
-                            <h3 className='font-semibold'>{getTypeLabel(request.title)}</h3>
-                            <Badge className={getPriorityColor(request.priority)}>{request.priority}</Badge>
-                            <Badge className={getStatusColor(request.status)}>{request.status.replace('_', ' ')}</Badge>
-                          </div>
-                          <p className='text-sm text-muted-foreground mt-1'>{request.description}</p>
-                          <div className='flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap'>
-                            <div className='flex items-center gap-1'><User className='h-3 w-3' />{request.customerName}</div>
-                            <div className='flex items-center gap-1'><Clock className='h-3 w-3' />{format(new Date(request.createdAt), 'MMM dd, yyyy')}</div>
-                            {request.assignedToName && <div className='flex items-center gap-1'><Users className='h-3 w-3' />{request.assignedToName}</div>}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className='flex items-center gap-2' onClick={(e) => e.stopPropagation()}>
-                      {!request.assignedTo && <Button size='sm' onClick={(e) => handleAssignToMe(request, e)}>Assign to Me</Button>}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant='ghost' size='sm'><MoreHorizontal className='h-4 w-4' /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align='end'>
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleStatusUpdate(request, 'in_progress')}><Zap className='h-4 w-4 mr-2' />Mark In Progress</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleStatusUpdate(request, 'completed')}><CheckCircle className='h-4 w-4 mr-2' />Mark Complete</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className='text-destructive'><Trash2 className='h-4 w-4 mr-2' />Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className='rounded-md border'>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Request ID</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedRequests.map((request) => (
-                  <TableRow
-                    key={request.id}
-                    className='cursor-pointer hover:bg-muted/50'
-                    onClick={() => handleCardClick(request)}
-                  >
-                    <TableCell>
-                      <div className='flex items-center gap-2'>
-                        {getTypeIcon(request.title)}
-                        <span className='text-sm'>{getTypeLabel(request.title)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className='font-medium'>{request.requestId}</TableCell>
-                    <TableCell>{request.customerName}</TableCell>
-                    <TableCell><Badge className={getPriorityColor(request.priority)}>{request.priority}</Badge></TableCell>
-                    <TableCell><Badge className={getStatusColor(request.status)}>{request.status.replace('_', ' ')}</Badge></TableCell>
-                    <TableCell className='text-sm text-muted-foreground'>{format(new Date(request.createdAt), 'MMM dd, yyyy')}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {paginatedRequests.length === 0 && (
-          <Card>
-            <CardContent className='flex flex-col items-center justify-center py-12'>
-              <Languages className='h-12 w-12 text-muted-foreground mb-4' />
-              <h3 className='font-semibold text-lg'>No translations found</h3>
-              <p className='text-muted-foreground text-sm'>Try adjusting your filters or search query</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Pagination */}
-        {paginatedRequests.length > 0 && (
-          <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-2'>
-              <span className='text-sm text-muted-foreground'>Items per page:</span>
-              <Select value={String(itemsPerPage)} onValueChange={(value) => { setItemsPerPage(Number(value)); setCurrentPage(1); }}>
-                <SelectTrigger className='w-[80px]'><SelectValue /></SelectTrigger>
+        {/* Split Panel Layout */}
+        <div className='flex flex-1 gap-4 min-h-0'>
+          {/* Left Panel - Request Queue */}
+          <div className='w-[320px] flex-shrink-0 flex flex-col border rounded-lg bg-card'>
+            {/* Search & Filter */}
+            <div className='p-3 border-b space-y-2'>
+              <Input
+                placeholder='Search requests...'
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className='h-9'
+              />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className='h-8 text-xs'>
+                  <SelectValue placeholder='All Status' />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='10'>10</SelectItem>
-                  <SelectItem value='20'>20</SelectItem>
-                  <SelectItem value='50'>50</SelectItem>
+                  <SelectItem value='all'>All Status</SelectItem>
+                  <SelectItem value='pending'>Pending</SelectItem>
+                  <SelectItem value='assigned'>Assigned</SelectItem>
+                  <SelectItem value='in_progress'>In Progress</SelectItem>
+                  <SelectItem value='completed'>Completed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className='flex items-center gap-2'>
-              <span className='text-sm text-muted-foreground'>
-                Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredRequests.length)} of {filteredRequests.length}
-              </span>
-              <div className='flex gap-1'>
-                <Button variant='outline' size='sm' onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</Button>
-                <Button variant='outline' size='sm' onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</Button>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Details Dialog */}
-        <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-          <DialogContent className='max-w-3xl max-h-[90vh] overflow-hidden flex flex-col'>
-            <DialogHeader>
-              <div className='flex items-center gap-3'>
-                {selectedRequest && getTypeIcon(selectedRequest.title)}
-                <div>
-                  <DialogTitle>{selectedRequest && getTypeLabel(selectedRequest.title)}</DialogTitle>
-                  <DialogDescription>{selectedRequest?.requestId} • {selectedRequest?.customerName}</DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-            {selectedRequest && (
-              <div className='flex-1 overflow-hidden flex flex-col'>
-                <div className='bg-muted rounded-lg p-4 mb-4 space-y-3'>
-                  <div className='grid grid-cols-2 gap-4 text-sm'>
-                    <div className='space-y-1'>
-                      <span className='text-muted-foreground'>Status</span>
-                      <div><Badge className={getStatusColor(selectedRequest.status)}>{selectedRequest.status.replace('_', ' ')}</Badge></div>
-                    </div>
-                    <div className='space-y-1'>
-                      <span className='text-muted-foreground'>Priority</span>
-                      <div><Badge className={getPriorityColor(selectedRequest.priority)}>{selectedRequest.priority}</Badge></div>
-                    </div>
-                    <div className='space-y-1'>
-                      <span className='text-muted-foreground'>Created</span>
-                      <p className='font-medium'>{format(new Date(selectedRequest.createdAt), 'PPpp')}</p>
-                    </div>
-                    <div className='space-y-1'>
-                      <span className='text-muted-foreground'>Customer</span>
-                      <p className='font-medium'>{selectedRequest.customerName}</p>
-                    </div>
-                  </div>
-                </div>
-                <ScrollArea className='flex-1 px-1'>
-                  <div className='space-y-4 pb-4'>
-                    {selectedRequest.threads.map((thread) => (
-                      <div key={thread.id} className={`flex ${thread.senderType === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[70%] ${thread.senderType === 'admin' ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3`}>
-                          <div className='flex items-center gap-2 mb-1'>
-                            <span className='text-xs font-medium'>{thread.sender}</span>
-                            <span className='text-xs opacity-70'>{format(new Date(thread.timestamp), 'PPp')}</span>
+            {/* Request List */}
+            <ScrollArea className='flex-1'>
+              <div className='p-2 space-y-2'>
+                {paginatedRequests.map((request) => {
+                  const thumbnail = getVehicleThumbnail(request)
+                  return (
+                    <div
+                      key={request.id}
+                      onClick={() => handleSelectRequest(request)}
+                      className={cn(
+                        'p-3 rounded-lg cursor-pointer transition-all border',
+                        selectedRequest?.id === request.id
+                          ? 'bg-primary/5 border-primary/30 shadow-sm'
+                          : 'bg-card hover:bg-muted/50 border-transparent hover:border-border'
+                      )}
+                    >
+                      <div className='flex items-start gap-3'>
+                        {/* Vehicle Thumbnail with Priority Dot */}
+                        <div className='relative flex-shrink-0'>
+                          {thumbnail ? (
+                            <img
+                              src={thumbnail}
+                              alt='Vehicle'
+                              className='w-11 h-11 rounded-lg object-cover'
+                            />
+                          ) : (
+                            <div className='w-11 h-11 rounded-lg bg-muted flex items-center justify-center'>
+                              <Car className='h-5 w-5 text-muted-foreground' />
+                            </div>
+                          )}
+                          {/* Priority Dot */}
+                          <div
+                            className={cn(
+                              'absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-card',
+                              getPriorityColor(request.priority)
+                            )}
+                          />
+                        </div>
+
+                        {/* Content */}
+                        <div className='flex-1 min-w-0'>
+                          <div className='flex items-start justify-between gap-2'>
+                            <span className='font-medium text-sm truncate'>{getVehicleName(request)}</span>
+                            <span className='text-[10px] text-muted-foreground whitespace-nowrap'>
+                              {getRelativeTime(request.createdAt)}
+                            </span>
                           </div>
-                          <p className='text-sm'>{thread.message}</p>
+                          <p className='text-xs text-muted-foreground truncate mt-0.5'>
+                            {request.customerName} • {getTypeLabel(request.title)}
+                          </p>
+                          <div className='flex items-center gap-2 mt-1.5'>
+                            <Badge className={cn('text-[10px] px-1.5 py-0 h-5 font-medium', getStatusBadge(request.status))}>
+                              {request.status.replace('_', ' ')}
+                            </Badge>
+                            {request.assignedToName && (
+                              <span className='text-[10px] text-muted-foreground flex items-center gap-1'>
+                                <User className='h-3 w-3' />
+                                {request.assignedToName.split(' ')[0]}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  )
+                })}
+
+                {paginatedRequests.length === 0 && (
+                  <div className='p-8 text-center text-muted-foreground'>
+                    <Languages className='h-8 w-8 mx-auto mb-2 opacity-50' />
+                    <p className='text-sm'>No requests found</p>
                   </div>
-                </ScrollArea>
-                <div className='border-t pt-4'>
-                  <div className='flex gap-2'>
-                    <Textarea placeholder='Type your message...' value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className='flex-1 min-h-[60px]' />
-                    <Button onClick={handleSendMessage} disabled={!newMessage.trim()}><Send className='h-4 w-4' /></Button>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Pagination Controls */}
+            {filteredRequests.length > 0 && (
+              <div className='p-3 border-t bg-muted/30'>
+                <div className='flex items-center justify-between'>
+                  <span className='text-xs text-muted-foreground'>
+                    {filteredRequests.length} request{filteredRequests.length !== 1 ? 's' : ''}
+                  </span>
+                  <div className='flex items-center gap-2'>
+                    <Button
+                      variant='outline'
+                      size='icon'
+                      className='h-7 w-7'
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className='h-4 w-4' />
+                    </Button>
+                    <span className='text-xs text-muted-foreground min-w-[80px] text-center'>
+                      Page {currentPage} of {totalPages || 1}
+                    </span>
+                    <Button
+                      variant='outline'
+                      size='icon'
+                      className='h-7 w-7'
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      <ChevronRight className='h-4 w-4' />
+                    </Button>
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Panel - Translation Editor */}
+          <div className='flex-1 flex flex-col border rounded-lg bg-card min-w-0 overflow-hidden'>
+            {selectedRequest ? (
+              <>
+                {/* Header */}
+                <div className='p-4 border-b flex-shrink-0'>
+                  <div className='flex items-start justify-between gap-4'>
+                    <div className='space-y-1'>
+                      <div className='flex items-center gap-2'>
+                        <Car className='h-5 w-5 text-muted-foreground' />
+                        <h3 className='font-semibold'>{getVehicleName(selectedRequest)}</h3>
+                        <Badge className={cn('text-xs', getStatusBadge(selectedRequest.status))}>
+                          {selectedRequest.status.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <div className='flex items-center gap-3 text-sm text-muted-foreground'>
+                        <span>{getTypeLabel(selectedRequest.title)}</span>
+                        <span>•</span>
+                        <span>{selectedRequest.customerName}</span>
+                        <span>•</span>
+                        <span className='font-mono text-xs'>{selectedRequest.requestId}</span>
+                        <span>•</span>
+                        <Badge className={cn('text-xs capitalize', getPriorityBadge(selectedRequest.priority))}>
+                          {selectedRequest.priority}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                      {!selectedRequest.assignedTo && (
+                        canAssignOthers ? (
+                          <>
+                            <Button size='sm' variant='outline' onClick={() => handleAssignToMe(selectedRequest)}>
+                              <UserPlus className='h-4 w-4 mr-1.5' />
+                              My Task
+                            </Button>
+                            <Button size='sm' variant='outline' onClick={() => setAssignDrawerOpen(true)}>
+                              <Users className='h-4 w-4 mr-1.5' />
+                              Assign Staff
+                            </Button>
+                          </>
+                        ) : (
+                          <Button size='sm' variant='outline' onClick={() => handleAssignToMe(selectedRequest)}>
+                            <UserPlus className='h-4 w-4 mr-1.5' />
+                            Assign to Me
+                          </Button>
+                        )
+                      )}
+                      {selectedRequest.status === 'pending' && selectedRequest.assignedTo && (
+                        <Button size='sm' onClick={handleStartTranslation}>
+                          <Zap className='h-4 w-4 mr-1.5' />
+                          Start Translation
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content Area - Split View */}
+                <div className='flex-1 flex flex-col min-h-0'>
+                  <div className='flex-1 flex min-h-0'>
+                    {/* Vehicle Images */}
+                    <div className='w-1/2 border-r flex flex-col'>
+                      <div className='p-2 border-b bg-muted/30 flex items-center justify-between'>
+                        <span className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+                          Vehicle Images {vehicleImages.length > 0 && `(${selectedImageIndex + 1}/${vehicleImages.length})`}
+                        </span>
+                        <div className='flex items-center gap-1'>
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='h-7 w-7'
+                            onClick={() => setImageZoom(Math.max(50, imageZoom - 25))}
+                          >
+                            <ZoomOut className='h-3.5 w-3.5' />
+                          </Button>
+                          <span className='text-xs text-muted-foreground w-12 text-center'>{imageZoom}%</span>
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='h-7 w-7'
+                            onClick={() => setImageZoom(Math.min(200, imageZoom + 25))}
+                          >
+                            <ZoomIn className='h-3.5 w-3.5' />
+                          </Button>
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='h-7 w-7'
+                            onClick={() => setImageRotation((r) => (r + 90) % 360)}
+                          >
+                            <RotateCw className='h-3.5 w-3.5' />
+                          </Button>
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            className='h-7 w-7'
+                            onClick={() => setIsFullscreen(true)}
+                          >
+                            <Maximize2 className='h-3.5 w-3.5' />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Main Image with Navigation */}
+                      <div className='flex-1 relative flex items-center justify-center bg-muted/20 overflow-hidden'>
+                        {vehicleImages.length > 0 ? (
+                          <>
+                            <img
+                              src={vehicleImages[selectedImageIndex]}
+                              alt={`Vehicle ${selectedImageIndex + 1}`}
+                              className='max-w-full max-h-full object-contain transition-transform duration-200'
+                              style={{
+                                transform: `scale(${imageZoom / 100}) rotate(${imageRotation}deg)`,
+                              }}
+                            />
+                            {/* Navigation Arrows */}
+                            {vehicleImages.length > 1 && (
+                              <>
+                                <Button
+                                  variant='secondary'
+                                  size='icon'
+                                  className='absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-80 hover:opacity-100'
+                                  onClick={handlePrevImage}
+                                >
+                                  <ChevronLeft className='h-5 w-5' />
+                                </Button>
+                                <Button
+                                  variant='secondary'
+                                  size='icon'
+                                  className='absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-80 hover:opacity-100'
+                                  onClick={handleNextImage}
+                                >
+                                  <ChevronRight className='h-5 w-5' />
+                                </Button>
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          <div className='text-center text-muted-foreground'>
+                            <Car className='h-16 w-16 mx-auto mb-2 opacity-30' />
+                            <p className='text-sm'>No images available</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Thumbnail Strip */}
+                      {vehicleImages.length > 1 && (
+                        <div className='p-2 border-t bg-muted/30'>
+                          <div className='flex gap-2 overflow-x-auto'>
+                            {vehicleImages.slice(0, 8).map((img, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setSelectedImageIndex(idx)}
+                                className={cn(
+                                  'flex-shrink-0 w-14 h-10 rounded-md overflow-hidden border-2 transition-all',
+                                  selectedImageIndex === idx
+                                    ? 'border-primary ring-1 ring-primary'
+                                    : 'border-transparent opacity-60 hover:opacity-100'
+                                )}
+                              >
+                                <img src={img} alt={`Thumb ${idx + 1}`} className='w-full h-full object-cover' />
+                              </button>
+                            ))}
+                            {vehicleImages.length > 8 && (
+                              <div className='flex-shrink-0 w-14 h-10 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground'>
+                                +{vehicleImages.length - 8}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                  {/* Translation Input */}
+                  <div className='w-1/2 flex flex-col'>
+                    <div className='p-2 border-b bg-muted/30'>
+                      <span className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>Translation</span>
+                    </div>
+                    <div className='flex-1 p-4 flex flex-col'>
+                      <Textarea
+                        placeholder='Enter the translated content here...'
+                        value={translationText}
+                        onChange={(e) => setTranslationText(e.target.value)}
+                        className='flex-1 resize-none text-sm leading-relaxed'
+                        disabled={selectedRequest.status === 'completed'}
+                      />
+                    </div>
+
+                    {/* Actions */}
+                    <div className='p-4 border-t bg-muted/20 flex items-center justify-between'>
+                      <div className='text-xs text-muted-foreground'>
+                        {translationText.length > 0 && (
+                          <span>{translationText.length} characters</span>
+                        )}
+                      </div>
+                      <div className='flex items-center gap-2'>
+                        {selectedRequest.status !== 'completed' && (
+                          <>
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              onClick={handleSaveDraft}
+                              disabled={!translationText.trim()}
+                            >
+                              <Save className='h-4 w-4 mr-1.5' />
+                              Save Draft
+                            </Button>
+                            <Button
+                              size='sm'
+                              onClick={handleCompleteTranslation}
+                              disabled={!translationText.trim()}
+                            >
+                              <CheckCircle className='h-4 w-4 mr-1.5' />
+                              Complete & Send
+                            </Button>
+                          </>
+                        )}
+                        {selectedRequest.status === 'completed' && (
+                          <span className='text-sm text-emerald-500 flex items-center gap-1.5'>
+                            <CheckCircle className='h-4 w-4' />
+                            Translation sent to customer
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+
+                  {/* Vehicle Details Bar */}
+                  {selectedAuction && (
+                    <div className='border-t bg-muted/30 p-3 flex-shrink-0'>
+                      <div className='flex items-center gap-6 text-sm overflow-x-auto'>
+                        <div className='flex items-center gap-2'>
+                          <Calendar className='h-4 w-4 text-muted-foreground' />
+                          <span className='text-muted-foreground'>Year:</span>
+                          <span className='font-medium'>{selectedAuction.vehicleInfo.year}</span>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <Gauge className='h-4 w-4 text-muted-foreground' />
+                          <span className='text-muted-foreground'>Mileage:</span>
+                          <span className='font-medium'>{selectedAuction.vehicleInfo.mileageDisplay}</span>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <span className='text-muted-foreground'>Grade:</span>
+                          <Badge variant='secondary' className='text-xs'>
+                            {selectedAuction.vehicleInfo.grade || 'N/A'}
+                          </Badge>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <Palette className='h-4 w-4 text-muted-foreground' />
+                          <span className='text-muted-foreground'>Color:</span>
+                          <span className='font-medium'>{selectedAuction.vehicleInfo.color}</span>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <span className='text-muted-foreground'>Trans:</span>
+                          <span className='font-medium'>{selectedAuction.vehicleInfo.transmission}</span>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <Hash className='h-4 w-4 text-muted-foreground' />
+                          <span className='text-muted-foreground'>Lot:</span>
+                          <span className='font-mono text-xs'>{selectedAuction.lotNumber}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className='flex-1 flex items-center justify-center text-muted-foreground'>
+                <div className='text-center'>
+                  <Languages className='h-12 w-12 mx-auto mb-4 opacity-50' />
+                  <p>Select a request to start translating</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Fullscreen Image Dialog */}
+        <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>
+          <DialogContent className='max-w-[90vw] max-h-[90vh] p-0 overflow-hidden'>
+            {selectedRequest && vehicleImages.length > 0 && (
+              <div className='relative w-full h-[85vh] bg-black/95 flex items-center justify-center'>
+                <div className='absolute top-4 right-4 flex items-center gap-2 z-10'>
+                  <Button
+                    variant='secondary'
+                    size='icon'
+                    className='h-8 w-8'
+                    onClick={() => setImageZoom(Math.max(50, imageZoom - 25))}
+                  >
+                    <ZoomOut className='h-4 w-4' />
+                  </Button>
+                  <span className='text-sm text-white bg-black/50 px-2 py-1 rounded'>{imageZoom}%</span>
+                  <Button
+                    variant='secondary'
+                    size='icon'
+                    className='h-8 w-8'
+                    onClick={() => setImageZoom(Math.min(300, imageZoom + 25))}
+                  >
+                    <ZoomIn className='h-4 w-4' />
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    size='icon'
+                    className='h-8 w-8'
+                    onClick={() => setImageRotation((r) => (r + 90) % 360)}
+                  >
+                    <RotateCw className='h-4 w-4' />
+                  </Button>
+                </div>
+                {/* Navigation in fullscreen */}
+                {vehicleImages.length > 1 && (
+                  <>
+                    <Button
+                      variant='secondary'
+                      size='icon'
+                      className='absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full'
+                      onClick={handlePrevImage}
+                    >
+                      <ChevronLeft className='h-6 w-6' />
+                    </Button>
+                    <Button
+                      variant='secondary'
+                      size='icon'
+                      className='absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full'
+                      onClick={handleNextImage}
+                    >
+                      <ChevronRight className='h-6 w-6' />
+                    </Button>
+                  </>
+                )}
+                <img
+                  src={vehicleImages[selectedImageIndex]}
+                  alt={`Vehicle ${selectedImageIndex + 1}`}
+                  className='max-w-full max-h-full object-contain transition-transform duration-200'
+                  style={{
+                    transform: `scale(${imageZoom / 100}) rotate(${imageRotation}deg)`,
+                  }}
+                />
+                {/* Image counter */}
+                <div className='absolute bottom-4 left-1/2 -translate-x-1/2 text-white bg-black/50 px-3 py-1 rounded-full text-sm'>
+                  {selectedImageIndex + 1} / {vehicleImages.length}
                 </div>
               </div>
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Assign Translator Drawer */}
+        <AssignTranslatorDrawer
+          open={assignDrawerOpen}
+          onOpenChange={setAssignDrawerOpen}
+          request={selectedRequest}
+          onAssign={handleAssignStaff}
+        />
       </Main>
     </>
   )

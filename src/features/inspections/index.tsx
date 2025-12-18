@@ -1,24 +1,17 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import {
-  Calendar,
+  ClipboardCheck,
   Car,
-  CheckCircle,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  Filter,
-  LayoutGrid,
-  List,
-  MoreHorizontal,
-  RefreshCw,
-  Search,
-  Send,
-  Trash2,
+  UserPlus,
   User,
   Users,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  CheckCircle,
   Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -29,28 +22,6 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -60,134 +31,256 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Search } from '@/components/search'
+import { cn } from '@/lib/utils'
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  requests as allRequests,
+  type ServiceRequest,
+  type InspectionMedia,
+  type InspectionNote,
+} from '../requests/data/requests'
+import { AssignInspectorDrawer } from './components/assign-inspector-drawer'
+import { MediaUploadSection } from './components/media-upload-section'
+import { InspectionNotes } from './components/inspection-notes'
 
-import { requests as allRequests, type ServiceRequest, type RequestThread } from '../requests/data/requests'
-import { StatsCard } from '@/features/dashboard/components/stats-card'
+const CURRENT_USER_ID = 'admin1'
+const CURRENT_USER_NAME = 'Current Admin'
+const CURRENT_USER_ROLE: 'superadmin' | 'admin' | 'manager' | 'cashier' = 'admin'
 
-const CURRENT_ADMIN_ID = 'admin1'
-const CURRENT_ADMIN_NAME = 'Current Admin'
+const canAssignOthers = ['superadmin', 'admin', 'manager'].includes(CURRENT_USER_ROLE)
 
 // Filter to only inspection requests
-const initialRequests = allRequests.filter(r => r.type === 'inspection')
+const initialRequests = allRequests.filter((r) => r.type === 'inspection')
+
+type InspectionType = 'all' | 'full' | 'pre_purchase' | 'performance' | 'condition'
 
 export function Inspections() {
   const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests)
-  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null)
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(
+    initialRequests[0] || null
+  )
   const [searchQuery, setSearchQuery] = useState('')
-  const [newMessage, setNewMessage] = useState('')
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false)
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
-  const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [inspectionType, setInspectionType] = useState<InspectionType>('all')
+  const [showMyTasks, setShowMyTasks] = useState(false)
+  const [assignDrawerOpen, setAssignDrawerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [statusFilters, setStatusFilters] = useState<string[]>([])
-  const [priorityFilters, setPriorityFilters] = useState<string[]>([])
+  const ITEMS_PER_PAGE = 10
 
+  // Compute counts
+  const counts = useMemo(() => {
+    const all = requests.length
+    const full = requests.filter((r) => r.title.includes('Full Inspection')).length
+    const prePurchase = requests.filter((r) => r.title.includes('Pre-purchase')).length
+    const performance = requests.filter((r) => r.title.includes('Performance')).length
+    const myTasks = requests.filter((r) => r.assignedTo === CURRENT_USER_ID).length
+    return { all, full, prePurchase, performance, myTasks }
+  }, [requests])
 
   const filteredRequests = useMemo(() => {
     return requests.filter((request) => {
       const matchesSearch =
         request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         request.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         request.requestId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (request.vehicleInfo?.vin?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+        request.vehicleInfo?.vin?.toLowerCase().includes(searchQuery.toLowerCase())
 
-      const matchesStatus = statusFilters.length === 0 || statusFilters.includes(request.status)
-      const matchesPriority = priorityFilters.length === 0 || priorityFilters.includes(request.priority)
+      const matchesStatus = statusFilter === 'all' || request.status === statusFilter
 
-      return matchesSearch && matchesStatus && matchesPriority
+      const matchesType =
+        inspectionType === 'all' ||
+        (inspectionType === 'full' && request.title.includes('Full Inspection')) ||
+        (inspectionType === 'pre_purchase' && request.title.includes('Pre-purchase')) ||
+        (inspectionType === 'performance' && request.title.includes('Performance')) ||
+        (inspectionType === 'condition' && request.title.includes('Condition'))
+
+      const matchesMyTasks = !showMyTasks || request.assignedTo === CURRENT_USER_ID
+
+      return matchesSearch && matchesStatus && matchesType && matchesMyTasks
     })
-  }, [requests, searchQuery, statusFilters, priorityFilters])
+  }, [requests, searchQuery, statusFilter, inspectionType, showMyTasks])
 
-  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage)
+  // Pagination logic
+  const totalPages = Math.ceil(filteredRequests.length / ITEMS_PER_PAGE)
   const paginatedRequests = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage
-    return filteredRequests.slice(startIndex, startIndex + itemsPerPage)
-  }, [filteredRequests, currentPage, itemsPerPage])
+    return filteredRequests.slice(
+      (currentPage - 1) * ITEMS_PER_PAGE,
+      currentPage * ITEMS_PER_PAGE
+    )
+  }, [filteredRequests, currentPage, ITEMS_PER_PAGE])
 
-  const stats = useMemo(() => ({
-    total: requests.length,
-    pending: requests.filter((r) => r.status === 'pending').length,
-    inProgress: requests.filter((r) => r.status === 'in_progress' || r.status === 'assigned').length,
-    completed: requests.filter((r) => r.status === 'completed').length,
-  }), [requests])
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, statusFilter, inspectionType, showMyTasks])
+
+  const handleSelectRequest = (request: ServiceRequest) => {
+    setSelectedRequest(request)
+  }
 
   const handleAssignToMe = (request: ServiceRequest) => {
-    setRequests(requests.map((r) =>
+    const updated = requests.map((r) =>
       r.id === request.id
-        ? { ...r, assignedTo: CURRENT_ADMIN_ID, assignedToName: CURRENT_ADMIN_NAME, status: 'assigned' as const }
+        ? {
+            ...r,
+            assignedTo: CURRENT_USER_ID,
+            assignedToName: CURRENT_USER_NAME,
+            status: 'assigned' as const,
+          }
         : r
-    ))
-    toast.success(`Request ${request.requestId} assigned to you`)
+    )
+    setRequests(updated)
+    setSelectedRequest({
+      ...request,
+      assignedTo: CURRENT_USER_ID,
+      assignedToName: CURRENT_USER_NAME,
+      status: 'assigned',
+    })
+    toast.success(`Inspection ${request.requestId} assigned to you`)
   }
 
-  const handleStatusUpdate = (request: ServiceRequest, newStatus: ServiceRequest['status']) => {
-    setRequests(requests.map((r) =>
-      r.id === request.id
-        ? { ...r, status: newStatus, updatedAt: new Date(), completedAt: newStatus === 'completed' ? new Date() : r.completedAt }
-        : r
-    ))
-    toast.success(`Request status updated to ${newStatus.replace('_', ' ')}`)
-  }
-
-  const handleSendMessage = () => {
-    if (!selectedRequest || !newMessage.trim()) return
-    const newThread: RequestThread = {
-      id: String(Date.now()),
-      sender: CURRENT_ADMIN_NAME,
-      senderType: 'admin',
-      message: newMessage,
-      timestamp: new Date(),
-    }
-    setRequests(requests.map((r) =>
+  const handleAssignStaff = (staffId: string, staffName: string) => {
+    if (!selectedRequest) return
+    const updated = requests.map((r) =>
       r.id === selectedRequest.id
-        ? { ...r, threads: [...r.threads, newThread], updatedAt: new Date() }
+        ? { ...r, assignedTo: staffId, assignedToName: staffName, status: 'assigned' as const }
         : r
-    ))
-    setSelectedRequest({ ...selectedRequest, threads: [...selectedRequest.threads, newThread] })
-    setNewMessage('')
-    toast.success('Message sent')
+    )
+    setRequests(updated)
+    setSelectedRequest({
+      ...selectedRequest,
+      assignedTo: staffId,
+      assignedToName: staffName,
+      status: 'assigned',
+    })
   }
 
+  const handleStartInspection = () => {
+    if (!selectedRequest) return
+    const updated = requests.map((r) =>
+      r.id === selectedRequest.id
+        ? { ...r, status: 'in_progress' as const, updatedAt: new Date() }
+        : r
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...selectedRequest, status: 'in_progress', updatedAt: new Date() })
+    toast.success('Inspection started')
+  }
+
+  const handleCompleteInspection = () => {
+    if (!selectedRequest) return
+    const updated = requests.map((r) =>
+      r.id === selectedRequest.id
+        ? {
+            ...r,
+            status: 'completed' as const,
+            updatedAt: new Date(),
+            completedAt: new Date(),
+          }
+        : r
+    )
+    setRequests(updated)
+    setSelectedRequest({
+      ...selectedRequest,
+      status: 'completed',
+      updatedAt: new Date(),
+      completedAt: new Date(),
+    })
+    toast.success('Inspection completed and sent to customer')
+  }
+
+  const handleAddMedia = (newMedia: InspectionMedia[]) => {
+    if (!selectedRequest) return
+    const updatedMedia = [...(selectedRequest.inspectionMedia || []), ...newMedia]
+    const updated = requests.map((r) =>
+      r.id === selectedRequest.id ? { ...r, inspectionMedia: updatedMedia } : r
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...selectedRequest, inspectionMedia: updatedMedia })
+  }
+
+  const handleDeleteMedia = (mediaId: string) => {
+    if (!selectedRequest) return
+    const updatedMedia = (selectedRequest.inspectionMedia || []).filter((m) => m.id !== mediaId)
+    const updated = requests.map((r) =>
+      r.id === selectedRequest.id ? { ...r, inspectionMedia: updatedMedia } : r
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...selectedRequest, inspectionMedia: updatedMedia })
+  }
+
+  const handleAddNote = (note: InspectionNote) => {
+    if (!selectedRequest) return
+    const updatedNotes = [...(selectedRequest.inspectionNotes || []), note]
+    const updated = requests.map((r) =>
+      r.id === selectedRequest.id ? { ...r, inspectionNotes: updatedNotes } : r
+    )
+    setRequests(updated)
+    setSelectedRequest({ ...selectedRequest, inspectionNotes: updatedNotes })
+  }
+
+  // Priority colors
   const getPriorityColor = (priority: ServiceRequest['priority']) => {
     const colors = {
-      urgent: 'text-red-600 bg-red-50 border-red-200',
-      high: 'text-orange-600 bg-orange-50 border-orange-200',
-      medium: 'text-yellow-600 bg-yellow-50 border-yellow-200',
-      low: 'text-green-600 bg-green-50 border-green-200',
+      urgent: 'bg-red-500',
+      high: 'bg-orange-500',
+      medium: 'bg-amber-500',
+      low: 'bg-slate-400',
     }
     return colors[priority]
   }
 
-  const getStatusColor = (status: ServiceRequest['status']) => {
+  const getPriorityBadge = (priority: ServiceRequest['priority']) => {
     const colors = {
-      completed: 'text-green-600 bg-green-50 border-green-200',
-      in_progress: 'text-blue-600 bg-blue-50 border-blue-200',
-      assigned: 'text-purple-600 bg-purple-50 border-purple-200',
-      pending: 'text-yellow-600 bg-yellow-50 border-yellow-200',
-      cancelled: 'text-gray-600 bg-gray-50 border-gray-200',
+      urgent: 'bg-red-500/10 text-red-400 border-red-500/20',
+      high: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+      medium: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      low: 'bg-muted text-muted-foreground border-transparent',
+    }
+    return colors[priority]
+  }
+
+  const getStatusBadge = (status: ServiceRequest['status']) => {
+    const colors = {
+      completed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+      in_progress: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
+      assigned: 'bg-violet-500/15 text-violet-400 border-violet-500/20',
+      pending: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+      cancelled: 'bg-muted text-muted-foreground border-transparent',
     }
     return colors[status]
   }
 
-  const clearFilters = () => {
-    setStatusFilters([])
-    setPriorityFilters([])
-    setSearchQuery('')
+  const getRelativeTime = (date: Date) => {
+    const now = new Date()
+    const diffInHours = Math.floor(
+      (now.getTime() - new Date(date).getTime()) / (1000 * 60 * 60)
+    )
+    if (diffInHours < 1) return 'Just now'
+    if (diffInHours < 24) return `${diffInHours}h ago`
+    const diffInDays = Math.floor(diffInHours / 24)
+    if (diffInDays === 1) return 'Yesterday'
+    if (diffInDays < 7) return `${diffInDays}d ago`
+    return format(new Date(date), 'MMM dd')
   }
 
-  const hasActiveFilters = statusFilters.length > 0 || priorityFilters.length > 0 || searchQuery
+  const getVehicleName = (request: ServiceRequest) => {
+    if (request.vehicleInfo) {
+      return `${request.vehicleInfo.year} ${request.vehicleInfo.make} ${request.vehicleInfo.model}`
+    }
+    return 'Unknown Vehicle'
+  }
 
+  const getInspectionType = (title: string) => {
+    if (title.includes('Full Inspection')) return 'Full'
+    if (title.includes('Pre-purchase')) return 'Pre-purchase'
+    if (title.includes('Performance')) return 'Performance'
+    if (title.includes('Condition')) return 'Condition'
+    if (title.includes('Detailed')) return 'Detailed'
+    return 'Inspection'
+  }
 
   return (
     <>
@@ -199,259 +292,362 @@ export function Inspections() {
         </div>
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+      <Main className='flex flex-1 flex-col gap-4 p-4 sm:p-6'>
         {/* Header */}
-        <div className='flex flex-wrap items-end justify-between gap-2'>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
           <div>
             <h2 className='text-2xl font-bold tracking-tight'>Inspections</h2>
-            <p className='text-muted-foreground'>Manage vehicle inspection requests</p>
+            <p className='text-muted-foreground text-sm'>
+              Manage vehicle inspection requests
+            </p>
           </div>
-          <Button variant='outline' size='sm'>
-            <RefreshCw className='h-4 w-4 mr-2' />
-            Refresh
-          </Button>
         </div>
 
-        {/* Stats */}
-        <div className='grid gap-4 md:grid-cols-4'>
-          <StatsCard title='Total Requests' value={stats.total} change={8} description='inspection requests' />
-          <StatsCard title='Pending' value={stats.pending} change={-5} description='awaiting assignment' />
-          <StatsCard title='In Progress' value={stats.inProgress} change={12} description='currently active' />
-          <StatsCard title='Completed' value={stats.completed} change={15} description='total completed' />
+        {/* Filters Row */}
+        <div className='flex flex-wrap items-center gap-3'>
+          <Tabs
+            value={inspectionType}
+            onValueChange={(v) => setInspectionType(v as InspectionType)}
+          >
+            <TabsList>
+              <TabsTrigger value='all'>All ({counts.all})</TabsTrigger>
+              <TabsTrigger value='full'>Full ({counts.full})</TabsTrigger>
+              <TabsTrigger value='pre_purchase'>Pre-purchase ({counts.prePurchase})</TabsTrigger>
+              <TabsTrigger value='performance'>Performance ({counts.performance})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className='flex flex-1 items-center gap-2 justify-end'>
+            <Button
+              variant={showMyTasks ? 'secondary' : 'outline'}
+              size='sm'
+              onClick={() => setShowMyTasks(!showMyTasks)}
+              className='gap-1.5'
+            >
+              <User className='h-4 w-4' />
+              My Tasks
+              {counts.myTasks > 0 && (
+                <Badge variant='secondary' className='ml-1 h-5 min-w-5 px-1.5 text-xs'>
+                  {counts.myTasks}
+                </Badge>
+              )}
+            </Button>
+          </div>
         </div>
 
-        {/* Filters */}
-        <Collapsible open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-          <Card>
-            <CardContent className='p-4'>
-              <div className='flex flex-wrap gap-4 items-center'>
-                <div className='relative flex-1 min-w-[200px]'>
-                  <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-                  <Input placeholder='Search inspections...' value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className='pl-10' />
-                </div>
-                <CollapsibleTrigger asChild>
-                  <Button variant='outline' size='sm'>
-                    <Filter className='h-4 w-4 mr-2' />
-                    Filters
-                    {hasActiveFilters && <Badge variant='secondary' className='ml-2'>{statusFilters.length + priorityFilters.length}</Badge>}
-                    {isFiltersOpen ? <ChevronUp className='h-4 w-4 ml-2' /> : <ChevronDown className='h-4 w-4 ml-2' />}
-                  </Button>
-                </CollapsibleTrigger>
-                {hasActiveFilters && <Button variant='ghost' size='sm' onClick={clearFilters}>Clear all</Button>}
-                <div className='flex items-center gap-2'>
-                  <Button variant={viewMode === 'cards' ? 'secondary' : 'ghost'} size='sm' onClick={() => setViewMode('cards')}><LayoutGrid className='h-4 w-4' /></Button>
-                  <Button variant={viewMode === 'table' ? 'secondary' : 'ghost'} size='sm' onClick={() => setViewMode('table')}><List className='h-4 w-4' /></Button>
-                </div>
-              </div>
+        {/* Split Panel Layout */}
+        <div className='flex flex-1 gap-4 min-h-0'>
+          {/* Left Panel - Request Queue */}
+          <div className='w-[320px] flex-shrink-0 flex flex-col border rounded-lg bg-card'>
+            {/* Search & Filter */}
+            <div className='p-3 border-b space-y-2'>
+              <Input
+                placeholder='Search requests...'
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className='h-9'
+              />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className='h-8 text-xs'>
+                  <SelectValue placeholder='All Status' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>All Status</SelectItem>
+                  <SelectItem value='pending'>Pending</SelectItem>
+                  <SelectItem value='assigned'>Assigned</SelectItem>
+                  <SelectItem value='in_progress'>In Progress</SelectItem>
+                  <SelectItem value='completed'>Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              <CollapsibleContent className='pt-4'>
-                <div className='grid gap-6 md:grid-cols-2'>
-                  <div className='space-y-3'>
-                    <h4 className='text-sm font-medium'>Status</h4>
-                    <div className='space-y-2'>
-                      {['pending', 'assigned', 'in_progress', 'completed', 'cancelled'].map((status) => (
-                        <div key={status} className='flex items-center space-x-2'>
-                          <Checkbox id={`status-${status}`} checked={statusFilters.includes(status)} onCheckedChange={(checked) => {
-                            if (checked) setStatusFilters([...statusFilters, status])
-                            else setStatusFilters(statusFilters.filter((s) => s !== status))
-                          }} />
-                          <label htmlFor={`status-${status}`} className='text-sm'>
-                            <Badge className={`${getStatusColor(status as ServiceRequest['status'])} capitalize`}>{status.replace('_', ' ')}</Badge>
-                          </label>
+            {/* Request List */}
+            <ScrollArea className='flex-1'>
+              <div className='p-2 space-y-2'>
+                {paginatedRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    onClick={() => handleSelectRequest(request)}
+                    className={cn(
+                      'p-3 rounded-lg cursor-pointer transition-all border',
+                      selectedRequest?.id === request.id
+                        ? 'bg-primary/5 border-primary/30 shadow-sm'
+                        : 'bg-card hover:bg-muted/50 border-transparent hover:border-border'
+                    )}
+                  >
+                    <div className='flex items-start gap-3'>
+                      {/* Vehicle Icon with Status Indicator */}
+                      <div className='relative'>
+                        <div className='w-11 h-11 rounded-lg bg-muted flex items-center justify-center'>
+                          <Car className='h-5 w-5 text-muted-foreground' />
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className='space-y-3'>
-                    <h4 className='text-sm font-medium'>Priority</h4>
-                    <div className='space-y-2'>
-                      {['urgent', 'high', 'medium', 'low'].map((priority) => (
-                        <div key={priority} className='flex items-center space-x-2'>
-                          <Checkbox id={`priority-${priority}`} checked={priorityFilters.includes(priority)} onCheckedChange={(checked) => {
-                            if (checked) setPriorityFilters([...priorityFilters, priority])
-                            else setPriorityFilters(priorityFilters.filter((p) => p !== priority))
-                          }} />
-                          <label htmlFor={`priority-${priority}`} className='text-sm'>
-                            <Badge className={`${getPriorityColor(priority as ServiceRequest['priority'])} capitalize`}>{priority}</Badge>
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </CardContent>
-          </Card>
-        </Collapsible>
+                        {/* Priority Dot */}
+                        <div
+                          className={cn(
+                            'absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-card',
+                            getPriorityColor(request.priority)
+                          )}
+                        />
+                      </div>
 
-        {/* Content */}
-        {viewMode === 'cards' ? (
-          <div className='space-y-4'>
-            {paginatedRequests.map((request) => (
-              <Card key={request.id} className='hover:shadow-md transition-shadow'>
-                <CardContent className='p-4'>
-                  <div className='flex items-start justify-between'>
-                    <div className='flex-1 space-y-3'>
-                      <div className='flex items-start gap-3'>
-                        <div className='flex-1'>
-                          <div className='flex items-center gap-2 flex-wrap'>
-                            <span className='text-xs text-muted-foreground'>{request.requestId}</span>
-                            <h3 className='font-semibold'>{request.title}</h3>
-                            <Badge className={getPriorityColor(request.priority)}>{request.priority}</Badge>
-                            <Badge className={getStatusColor(request.status)}>{request.status.replace('_', ' ')}</Badge>
-                          </div>
-                          <p className='text-sm text-muted-foreground mt-1'>{request.description}</p>
-                          <div className='flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap'>
-                            <div className='flex items-center gap-1'><User className='h-3 w-3' />{request.customerName}</div>
-                            <div className='flex items-center gap-1'><Calendar className='h-3 w-3' />{format(new Date(request.createdAt), 'MMM dd, yyyy')}</div>
-                            {request.assignedToName && <div className='flex items-center gap-1'><Users className='h-3 w-3' />{request.assignedToName}</div>}
-                          </div>
-                          {request.vehicleInfo && (
-                            <div className='mt-2 text-sm text-muted-foreground flex items-center gap-2'>
-                              <Car className='h-3 w-3' />
-                              <span className='font-medium'>Vehicle:</span> {request.vehicleInfo.year} {request.vehicleInfo.make} {request.vehicleInfo.model}
-                              {request.vehicleInfo.vin && <span className='text-xs'>• VIN: {request.vehicleInfo.vin}</span>}
-                            </div>
+                      {/* Content */}
+                      <div className='flex-1 min-w-0'>
+                        <div className='flex items-start justify-between gap-2'>
+                          <span className='font-medium text-sm truncate'>
+                            {getVehicleName(request)}
+                          </span>
+                          <span className='text-[10px] text-muted-foreground whitespace-nowrap'>
+                            {getRelativeTime(request.createdAt)}
+                          </span>
+                        </div>
+                        <p className='text-xs text-muted-foreground truncate mt-0.5'>
+                          {request.customerName} • {getInspectionType(request.title)}
+                        </p>
+                        <div className='flex items-center gap-2 mt-1.5'>
+                          <Badge
+                            className={cn(
+                              'text-[10px] px-1.5 py-0 h-5 font-medium',
+                              getStatusBadge(request.status)
+                            )}
+                          >
+                            {request.status.replace('_', ' ')}
+                          </Badge>
+                          {request.assignedToName && (
+                            <span className='text-[10px] text-muted-foreground flex items-center gap-1'>
+                              <User className='h-3 w-3' />
+                              {request.assignedToName.split(' ')[0]}
+                            </span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <div className='flex items-center gap-2'>
-                      <Button variant='outline' size='sm' onClick={() => { setSelectedRequest(request); setIsDetailsOpen(true); }}>
-                        <Eye className='h-4 w-4 mr-2' />View
-                      </Button>
-                      {!request.assignedTo && <Button size='sm' onClick={() => handleAssignToMe(request)}>Assign to Me</Button>}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant='ghost' size='sm'><MoreHorizontal className='h-4 w-4' /></Button></DropdownMenuTrigger>
-                        <DropdownMenuContent align='end'>
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleStatusUpdate(request, 'in_progress')}><Zap className='h-4 w-4 mr-2' />Mark In Progress</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleStatusUpdate(request, 'completed')}><CheckCircle className='h-4 w-4 mr-2' />Mark Complete</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className='text-destructive'><Trash2 className='h-4 w-4 mr-2' />Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className='rounded-md border'>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Request ID</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Vehicle</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className='text-right'>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedRequests.map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell className='font-medium'>{request.requestId}</TableCell>
-                    <TableCell><p className='font-medium truncate max-w-[200px]'>{request.title}</p></TableCell>
-                    <TableCell>
-                      {request.vehicleInfo && (
-                        <p className='text-sm'>{request.vehicleInfo.year} {request.vehicleInfo.make} {request.vehicleInfo.model}</p>
-                      )}
-                    </TableCell>
-                    <TableCell><p className='font-medium'>{request.customerName}</p></TableCell>
-                    <TableCell><Badge className={getPriorityColor(request.priority)}>{request.priority}</Badge></TableCell>
-                    <TableCell><Badge className={getStatusColor(request.status)}>{request.status.replace('_', ' ')}</Badge></TableCell>
-                    <TableCell>{format(new Date(request.createdAt), 'MMM dd, yyyy')}</TableCell>
-                    <TableCell className='text-right'>
-                      <Button variant='ghost' size='sm' onClick={() => { setSelectedRequest(request); setIsDetailsOpen(true); }}><Eye className='h-4 w-4' /></Button>
-                    </TableCell>
-                  </TableRow>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
 
-        {/* Pagination */}
-        <div className='flex items-center justify-between'>
-          <div className='flex items-center gap-2'>
-            <span className='text-sm text-muted-foreground'>Items per page:</span>
-            <Select value={String(itemsPerPage)} onValueChange={(value) => { setItemsPerPage(Number(value)); setCurrentPage(1); }}>
-              <SelectTrigger className='w-[80px]'><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value='10'>10</SelectItem>
-                <SelectItem value='20'>20</SelectItem>
-                <SelectItem value='50'>50</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className='flex items-center gap-2'>
-            <span className='text-sm text-muted-foreground'>
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredRequests.length)} of {filteredRequests.length}
-            </span>
-            <div className='flex gap-1'>
-              <Button variant='outline' size='sm' onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</Button>
-              <Button variant='outline' size='sm' onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</Button>
-            </div>
-          </div>
-        </div>
+                {paginatedRequests.length === 0 && (
+                  <div className='p-8 text-center text-muted-foreground'>
+                    <ClipboardCheck className='h-8 w-8 mx-auto mb-2 opacity-50' />
+                    <p className='text-sm'>No requests found</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
 
-        {/* Details Dialog */}
-        <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-          <DialogContent className='max-w-3xl max-h-[90vh] overflow-hidden flex flex-col'>
-            <DialogHeader>
-              <DialogTitle>{selectedRequest?.title}</DialogTitle>
-              <DialogDescription>{selectedRequest?.requestId} • {selectedRequest?.customerName}</DialogDescription>
-            </DialogHeader>
-            {selectedRequest && (
-              <div className='flex-1 overflow-hidden flex flex-col'>
-                <div className='bg-muted rounded-lg p-4 mb-4 space-y-2'>
-                  <div className='grid grid-cols-2 gap-4 text-sm'>
-                    <div><span className='text-muted-foreground'>Status:</span> <Badge className={getStatusColor(selectedRequest.status)}>{selectedRequest.status.replace('_', ' ')}</Badge></div>
-                    <div><span className='text-muted-foreground'>Priority:</span> <Badge className={getPriorityColor(selectedRequest.priority)}>{selectedRequest.priority}</Badge></div>
-                    <div><span className='text-muted-foreground'>Created:</span> {format(new Date(selectedRequest.createdAt), 'PPpp')}</div>
-                    <div><span className='text-muted-foreground'>Customer:</span> {selectedRequest.customerName}</div>
-                  </div>
-                  {selectedRequest.vehicleInfo && (
-                    <div className='pt-2 border-t'>
-                      <span className='text-sm font-medium'>Vehicle Info:</span>
-                      <p className='text-sm text-muted-foreground'>
-                        {selectedRequest.vehicleInfo.year} {selectedRequest.vehicleInfo.make} {selectedRequest.vehicleInfo.model}
-                        {selectedRequest.vehicleInfo.vin && ` • VIN: ${selectedRequest.vehicleInfo.vin}`}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <ScrollArea className='flex-1 px-1'>
-                  <div className='space-y-4 pb-4'>
-                    {selectedRequest.threads.map((thread) => (
-                      <div key={thread.id} className={`flex ${thread.senderType === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[70%] ${thread.senderType === 'admin' ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3`}>
-                          <div className='flex items-center gap-2 mb-1'>
-                            <span className='text-xs font-medium'>{thread.sender}</span>
-                            <span className='text-xs opacity-70'>{format(new Date(thread.timestamp), 'PPp')}</span>
-                          </div>
-                          <p className='text-sm'>{thread.message}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-                <div className='border-t pt-4'>
-                  <div className='flex gap-2'>
-                    <Textarea placeholder='Type your message...' value={newMessage} onChange={(e) => setNewMessage(e.target.value)} className='flex-1 min-h-[60px]' />
-                    <Button onClick={handleSendMessage} disabled={!newMessage.trim()}><Send className='h-4 w-4' /></Button>
+            {/* Pagination Controls */}
+            {filteredRequests.length > 0 && (
+              <div className='p-3 border-t bg-muted/30'>
+                <div className='flex items-center justify-between'>
+                  <span className='text-xs text-muted-foreground'>
+                    {filteredRequests.length} request
+                    {filteredRequests.length !== 1 ? 's' : ''}
+                  </span>
+                  <div className='flex items-center gap-2'>
+                    <Button
+                      variant='outline'
+                      size='icon'
+                      className='h-7 w-7'
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className='h-4 w-4' />
+                    </Button>
+                    <span className='text-xs text-muted-foreground min-w-[80px] text-center'>
+                      Page {currentPage} of {totalPages || 1}
+                    </span>
+                    <Button
+                      variant='outline'
+                      size='icon'
+                      className='h-7 w-7'
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      <ChevronRight className='h-4 w-4' />
+                    </Button>
                   </div>
                 </div>
               </div>
             )}
-          </DialogContent>
-        </Dialog>
+          </div>
+
+          {/* Right Panel - Inspection Details */}
+          <div className='flex-1 flex flex-col border rounded-lg bg-card min-w-0 overflow-hidden'>
+            {selectedRequest ? (
+              <>
+                {/* Header */}
+                <div className='p-4 border-b flex-shrink-0'>
+                  <div className='flex items-start justify-between gap-4'>
+                    <div className='space-y-1'>
+                      <div className='flex items-center gap-2'>
+                        <Car className='h-5 w-5 text-muted-foreground' />
+                        <h3 className='font-semibold'>{getVehicleName(selectedRequest)}</h3>
+                        <Badge className={cn('text-xs', getStatusBadge(selectedRequest.status))}>
+                          {selectedRequest.status.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <div className='flex items-center gap-3 text-sm text-muted-foreground'>
+                        <span>{getInspectionType(selectedRequest.title)}</span>
+                        <span>•</span>
+                        <span>{selectedRequest.customerName}</span>
+                        <span>•</span>
+                        <span className='font-mono text-xs'>{selectedRequest.requestId}</span>
+                        <span>•</span>
+                        <Badge
+                          className={cn(
+                            'text-xs capitalize',
+                            getPriorityBadge(selectedRequest.priority)
+                          )}
+                        >
+                          {selectedRequest.priority}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                      {!selectedRequest.assignedTo &&
+                        (canAssignOthers ? (
+                          <>
+                            <Button
+                              size='sm'
+                              variant='outline'
+                              onClick={() => handleAssignToMe(selectedRequest)}
+                            >
+                              <UserPlus className='h-4 w-4 mr-1.5' />
+                              My Task
+                            </Button>
+                            <Button
+                              size='sm'
+                              variant='outline'
+                              onClick={() => setAssignDrawerOpen(true)}
+                            >
+                              <Users className='h-4 w-4 mr-1.5' />
+                              Assign Staff
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size='sm'
+                            variant='outline'
+                            onClick={() => handleAssignToMe(selectedRequest)}
+                          >
+                            <UserPlus className='h-4 w-4 mr-1.5' />
+                            Assign to Me
+                          </Button>
+                        ))}
+                      {selectedRequest.status === 'assigned' && (
+                        <Button size='sm' onClick={handleStartInspection}>
+                          <Zap className='h-4 w-4 mr-1.5' />
+                          Start Inspection
+                        </Button>
+                      )}
+                      {selectedRequest.status === 'in_progress' && (
+                        <Button size='sm' onClick={handleCompleteInspection}>
+                          <CheckCircle className='h-4 w-4 mr-1.5' />
+                          Complete & Send
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content Area - Split View */}
+                <div className='flex-1 flex flex-col min-h-0'>
+                  <div className='flex-1 flex min-h-0'>
+                    {/* Media Upload Section */}
+                    <div className='w-1/2 border-r flex flex-col'>
+                      <div className='p-2 border-b bg-muted/30'>
+                        <span className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+                          Inspection Media
+                        </span>
+                      </div>
+                      <div className='flex-1 p-4 overflow-y-auto'>
+                        <MediaUploadSection
+                          media={selectedRequest.inspectionMedia || []}
+                          onAddMedia={handleAddMedia}
+                          onDeleteMedia={handleDeleteMedia}
+                          disabled={
+                            selectedRequest.status === 'completed' ||
+                            selectedRequest.status === 'pending'
+                          }
+                          currentUser={CURRENT_USER_NAME}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Notes Section */}
+                    <div className='w-1/2 flex flex-col'>
+                      <div className='p-2 border-b bg-muted/30'>
+                        <span className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
+                          Inspection Notes
+                        </span>
+                      </div>
+                      <div className='flex-1 p-4 overflow-hidden'>
+                        <InspectionNotes
+                          notes={selectedRequest.inspectionNotes || []}
+                          onAddNote={handleAddNote}
+                          disabled={
+                            selectedRequest.status === 'completed' ||
+                            selectedRequest.status === 'pending'
+                          }
+                          currentUser={CURRENT_USER_NAME}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vehicle Details Bar */}
+                  {selectedRequest.vehicleInfo && (
+                    <div className='border-t bg-muted/30 p-3 flex-shrink-0'>
+                      <div className='flex items-center gap-6 text-sm overflow-x-auto'>
+                        <div className='flex items-center gap-2'>
+                          <Calendar className='h-4 w-4 text-muted-foreground' />
+                          <span className='text-muted-foreground'>Year:</span>
+                          <span className='font-medium'>{selectedRequest.vehicleInfo.year}</span>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <span className='text-muted-foreground'>Make:</span>
+                          <span className='font-medium'>{selectedRequest.vehicleInfo.make}</span>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <span className='text-muted-foreground'>Model:</span>
+                          <span className='font-medium'>{selectedRequest.vehicleInfo.model}</span>
+                        </div>
+                        {selectedRequest.vehicleInfo.vin && (
+                          <div className='flex items-center gap-2'>
+                            <span className='text-muted-foreground'>VIN:</span>
+                            <span className='font-mono text-xs'>
+                              {selectedRequest.vehicleInfo.vin}
+                            </span>
+                          </div>
+                        )}
+                        {selectedRequest.assignedToName && (
+                          <div className='flex items-center gap-2'>
+                            <User className='h-4 w-4 text-muted-foreground' />
+                            <span className='text-muted-foreground'>Assigned:</span>
+                            <span className='font-medium'>{selectedRequest.assignedToName}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className='flex-1 flex items-center justify-center text-muted-foreground'>
+                <div className='text-center'>
+                  <ClipboardCheck className='h-12 w-12 mx-auto mb-4 opacity-50' />
+                  <p>Select a request to view inspection details</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Assign Inspector Drawer */}
+        <AssignInspectorDrawer
+          open={assignDrawerOpen}
+          onOpenChange={setAssignDrawerOpen}
+          request={selectedRequest}
+          onAssign={handleAssignStaff}
+        />
       </Main>
     </>
   )

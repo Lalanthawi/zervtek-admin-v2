@@ -5,7 +5,6 @@ import {
   MessageSquare,
   FileText,
   Radio,
-  Smartphone,
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
@@ -16,17 +15,15 @@ import { ConnectionPanel } from './components/connection-panel'
 import { ChatInterface } from './components/chat-interface'
 import { TemplatesPanel } from './components/templates-panel'
 import { BroadcastPanel } from './components/broadcast-panel'
-import { AnalyticsPanel } from './components/analytics-panel'
 
 const tabs = [
-  { id: 'overview', label: 'Overview', icon: Smartphone },
   { id: 'chats', label: 'Chats', icon: MessageSquare },
   { id: 'templates', label: 'Templates', icon: FileText },
   { id: 'broadcast', label: 'Broadcast', icon: Radio },
 ]
 
 export function WhatsApp() {
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState('chats')
 
   return (
     <>
@@ -53,7 +50,7 @@ export function WhatsApp() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className='space-y-4'>
-          <TabsList className='grid w-full grid-cols-4 lg:w-auto lg:grid-cols-none lg:flex'>
+          <TabsList className='grid w-full grid-cols-3 lg:w-auto lg:grid-cols-none lg:flex'>
             {tabs.map((tab) => {
               const Icon = tab.icon
               return (
@@ -68,10 +65,6 @@ export function WhatsApp() {
               )
             })}
           </TabsList>
-
-          <TabsContent value='overview' className='space-y-4'>
-            <AnalyticsPanel />
-          </TabsContent>
 
           <TabsContent value='chats'>
             <ChatInterface />

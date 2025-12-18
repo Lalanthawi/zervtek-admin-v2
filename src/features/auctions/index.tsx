@@ -57,21 +57,10 @@ import {
   HelpCircle,
   Car,
   Cog,
+  Camera,
   Copy,
   Check,
-  Share2,
-  Download,
-  Heart,
-  MapPin,
-  Camera,
-  Send,
-  Calendar,
-  Gauge,
-  Palette,
-  Settings2,
-  Info,
 } from 'lucide-react'
-import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -167,7 +156,7 @@ export function Auctions() {
 
   // Detail modal states
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedLot, setCopiedLot] = useState(false)
 
   // Get unique makes and models from data
   const uniqueMakes = useMemo(() => {
@@ -644,9 +633,12 @@ export function Auctions() {
       {/* View Details Dialog - Refined */}
       <Dialog open={viewDialogOpen} onOpenChange={(open) => {
         setViewDialogOpen(open)
-        if (!open) setSelectedImageIndex(0)
+        if (!open) {
+          setSelectedImageIndex(0)
+          setCopiedLot(false)
+        }
       }}>
-        <DialogContent className='sm:max-w-2xl w-[90vw] max-h-[90vh] !flex !flex-col !gap-0 p-0 overflow-hidden'>
+        <DialogContent className='sm:max-w-2xl w-[90vw] max-h-[90vh] !flex !flex-col !gap-0 p-0 overflow-hidden shadow-2xl'>
           {selectedAuction && (
             <div className='flex flex-col max-h-[90vh]'>
               {/* Header */}
@@ -669,41 +661,6 @@ export function Auctions() {
                     >
                       {selectedAuction.status.charAt(0).toUpperCase() + selectedAuction.status.slice(1)}
                     </Badge>
-                  </div>
-                  <div className='flex items-center gap-3 text-sm text-muted-foreground'>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedAuction.lotNumber)
-                        setCopiedId('lot')
-                        setTimeout(() => setCopiedId(null), 2000)
-                        toast.success('Lot number copied')
-                      }}
-                      className='flex items-center gap-1.5 font-mono hover:text-foreground transition-colors group'
-                    >
-                      <span>Lot: <span className='font-semibold'>{selectedAuction.lotNumber}</span></span>
-                      {copiedId === 'lot' ? (
-                        <Check className='w-3.5 h-3.5 text-emerald-500' />
-                      ) : (
-                        <Copy className='w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity' />
-                      )}
-                    </button>
-                    <span className='text-muted-foreground/50'>•</span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedAuction.auctionId)
-                        setCopiedId('auction')
-                        setTimeout(() => setCopiedId(null), 2000)
-                        toast.success('Auction ID copied')
-                      }}
-                      className='flex items-center gap-1.5 font-mono hover:text-foreground transition-colors group'
-                    >
-                      <span>ID: {selectedAuction.auctionId}</span>
-                      {copiedId === 'auction' ? (
-                        <Check className='w-3.5 h-3.5 text-emerald-500' />
-                      ) : (
-                        <Copy className='w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity' />
-                      )}
-                    </button>
                   </div>
                 </div>
               </div>
@@ -757,7 +714,7 @@ export function Auctions() {
                           key={idx}
                           onClick={() => setSelectedImageIndex(idx)}
                           className={cn(
-                            'relative flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden transition-all duration-150',
+                            'relative flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden transition-all duration-150 cursor-pointer',
                             idx === selectedImageIndex
                               ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
                               : 'opacity-60 hover:opacity-100 hover:scale-105'
@@ -775,162 +732,117 @@ export function Auctions() {
                 </div>
 
                 {/* Price & Key Info */}
-                <div className='bg-muted/30 rounded-xl p-4'>
-                  <div className='flex items-start justify-between'>
+                <div className='bg-gradient-to-br from-muted/40 to-muted/20 rounded-xl p-5 space-y-4 border border-border/30'>
+                  {/* Price Row with Assist Buyer */}
+                  <div className='flex items-center justify-between gap-4'>
                     <div>
-                      <p className='text-sm text-muted-foreground mb-1'>Starting Price</p>
-                      <p className='text-2xl font-bold text-foreground tabular-nums'>
+                      <p className='text-xs text-muted-foreground/60 uppercase tracking-wide mb-1'>Starting Price</p>
+                      <p className='text-3xl font-bold text-foreground tabular-nums'>
                         ¥{selectedAuction.startingBid.toLocaleString()}
                       </p>
                     </div>
-                    <div className='text-right space-y-1'>
-                      <p className='text-sm'>
-                        <span className='text-muted-foreground'>Lot:</span>{' '}
-                        <span className='font-medium'>{selectedAuction.lotNumber}</span>
+                    {selectedAuction.status === 'active' && (
+                      <Button
+                        size='lg'
+                        onClick={() => setIsAssistBuyerOpen(true)}
+                        className='bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200 hover:scale-[1.02]'
+                      >
+                        <Hand className='mr-2 h-4 w-4' />
+                        Assist Buyer
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Info Grid */}
+                  <div className='grid grid-cols-3 gap-3 pt-3 border-t border-border/30'>
+                    <div className='space-y-0.5'>
+                      <p className='text-xs text-muted-foreground/60'>Auction House</p>
+                      <p className='text-sm font-medium'>{selectedAuction.auctionHouse}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedAuction.lotNumber)
+                        setCopiedLot(true)
+                        setTimeout(() => setCopiedLot(false), 2000)
+                        toast.success('Lot number copied')
+                      }}
+                      className='space-y-0.5 text-center hover:bg-background/30 rounded-lg py-1 -my-1 transition-colors group'
+                    >
+                      <p className='text-xs text-muted-foreground/60 flex items-center justify-center gap-1'>
+                        Lot No.
+                        {copiedLot ? (
+                          <Check className='w-3 h-3 text-emerald-500' />
+                        ) : (
+                          <Copy className='w-3 h-3 opacity-0 group-hover:opacity-70 transition-opacity' />
+                        )}
                       </p>
-                      <p className='text-sm'>
-                        <span className='text-muted-foreground'>House:</span>{' '}
-                        <span className='font-medium'>{selectedAuction.auctionHouse}</span>
-                      </p>
-                      <p className='text-sm'>
-                        <span className='text-muted-foreground'>Date:</span>{' '}
-                        <span className='font-medium tabular-nums'>{format(new Date(selectedAuction.startTime), 'MMM d, yyyy')}</span>
-                      </p>
+                      <p className='text-sm font-medium'>{selectedAuction.lotNumber}</p>
+                    </button>
+                    <div className='space-y-0.5 text-right'>
+                      <p className='text-xs text-muted-foreground/60'>Auction Date</p>
+                      <p className='text-sm font-medium tabular-nums'>{format(new Date(selectedAuction.startTime), 'MMM d, yyyy')}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Vehicle Information */}
-                <div className='space-y-3'>
-                  <h3 className='text-sm font-medium text-muted-foreground uppercase tracking-wide'>
+                <div className='bg-muted/20 rounded-xl p-4 space-y-3'>
+                  <h3 className='text-xs font-medium text-muted-foreground/70 uppercase tracking-wide'>
                     Vehicle Information
                   </h3>
-                  <div className='space-y-2.5'>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Make</span>
-                      <span className='font-medium'>{selectedAuction.vehicleInfo.make}</span>
-                    </div>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Model</span>
-                      <span className='font-medium'>{selectedAuction.vehicleInfo.model}</span>
-                    </div>
+                  <div className='space-y-2'>
                     <div className='flex items-center justify-between text-sm'>
                       <span className='text-muted-foreground'>Year</span>
                       <span className='font-medium tabular-nums'>{selectedAuction.vehicleInfo.year}</span>
                     </div>
                     <div className='flex items-center justify-between text-sm'>
                       <span className='text-muted-foreground'>Grade</span>
-                      <span className='font-medium max-w-[200px] text-right truncate'>
-                        {selectedAuction.vehicleInfo.grade || '—'}
-                      </span>
+                      {selectedAuction.vehicleInfo.score ? (
+                        <Badge className={cn(
+                          'text-xs px-2 py-0.5 font-semibold',
+                          ['S', '6', '5', '4.5'].includes(selectedAuction.vehicleInfo.score)
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : ['4', '3.5', '3'].includes(selectedAuction.vehicleInfo.score)
+                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        )}>
+                          {selectedAuction.vehicleInfo.score}
+                        </Badge>
+                      ) : (
+                        <span className='font-medium text-muted-foreground'>—</span>
+                      )}
                     </div>
                     <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Displacement</span>
+                      <span className='text-muted-foreground'>Engine</span>
                       <span className='font-medium'>{selectedAuction.vehicleInfo.displacement || '—'}</span>
                     </div>
                     <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>VIN</span>
-                      <span className='font-medium font-mono text-xs'>
-                        {selectedAuction.vehicleInfo.vin || '—'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator className='bg-border/50' />
-
-                {/* Auction Details */}
-                <div className='space-y-3'>
-                  <h3 className='text-sm font-medium text-muted-foreground uppercase tracking-wide'>
-                    Auction Details
-                  </h3>
-                  <div className='space-y-2.5'>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground flex items-center gap-1.5'>
-                        <Gauge className='w-3.5 h-3.5' />
-                        Mileage
-                      </span>
-                      <span className='font-medium'>{selectedAuction.vehicleInfo.mileageDisplay}</span>
-                    </div>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground flex items-center gap-1.5'>
-                        <Settings2 className='w-3.5 h-3.5' />
-                        Transmission
-                      </span>
+                      <span className='text-muted-foreground'>Trans</span>
                       <span className='font-medium'>{selectedAuction.vehicleInfo.transmission}</span>
                     </div>
                     <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground flex items-center gap-1.5'>
-                        <Palette className='w-3.5 h-3.5' />
-                        Color
-                      </span>
-                      <span className='font-medium'>{selectedAuction.vehicleInfo.color}</span>
+                      <span className='text-muted-foreground'>Model</span>
+                      <span className='font-medium'>{selectedAuction.vehicleInfo.model}</span>
                     </div>
                     <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground flex items-center gap-1.5'>
-                        <MapPin className='w-3.5 h-3.5' />
-                        Location
-                      </span>
-                      <span className='font-medium flex items-center gap-1.5'>
-                        {selectedAuction.location}
-                        <Badge variant='outline' className='text-[10px] px-1.5 py-0'>JP</Badge>
+                      <span className='text-muted-foreground'>Mileage</span>
+                      <span className={cn(
+                        'font-medium',
+                        selectedAuction.vehicleInfo.mileage > 0 && selectedAuction.vehicleInfo.mileage < 10 && 'text-emerald-400'
+                      )}>
+                        {selectedAuction.vehicleInfo.mileage === 0
+                          ? '0 km'
+                          : selectedAuction.vehicleInfo.mileage > 0 && selectedAuction.vehicleInfo.mileage < 10
+                            ? `${(selectedAuction.vehicleInfo.mileage * 1000).toLocaleString()} km`
+                            : selectedAuction.vehicleInfo.mileageDisplay}
+                        {selectedAuction.vehicleInfo.mileage > 0 && selectedAuction.vehicleInfo.mileage < 10 && (
+                          <span className='ml-1.5 text-xs text-emerald-400/70'>Low</span>
+                        )}
                       </span>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Action Footer */}
-              <div className='flex items-center justify-between p-4 border-t border-border/50 bg-muted/20'>
-                {/* Secondary Actions */}
-                <div className='flex items-center gap-1'>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant='ghost' size='icon' className='h-9 w-9 rounded-lg'>
-                        <Share2 className='h-4 w-4' />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Share</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant='ghost' size='icon' className='h-9 w-9 rounded-lg'>
-                        <Download className='h-4 w-4' />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Download PDF</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant='ghost' size='icon' className='h-9 w-9 rounded-lg'>
-                        <Heart className='h-4 w-4' />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Add to Watchlist</TooltipContent>
-                  </Tooltip>
-                </div>
-
-                {/* Primary Actions */}
-                <div className='flex items-center gap-2'>
-                  {selectedAuction.status === 'draft' && (
-                    <Button size='sm'>
-                      <Send className='mr-2 h-4 w-4' />
-                      Publish
-                    </Button>
-                  )}
-                  {selectedAuction.status === 'active' && (
-                    <Button size='sm' onClick={() => setIsAssistBuyerOpen(true)}>
-                      <Hand className='mr-2 h-4 w-4' />
-                      Assist Buyer
-                    </Button>
-                  )}
-                  {(selectedAuction.status === 'ended' || selectedAuction.status === 'sold') && (
-                    <Button variant='outline' size='sm'>
-                      <Info className='mr-2 h-4 w-4' />
-                      View Results
-                    </Button>
-                  )}
-                </div>
               </div>
             </div>
           )}

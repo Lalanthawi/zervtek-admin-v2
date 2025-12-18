@@ -16,6 +16,7 @@ import {
   XCircle,
   Clock,
   Award,
+  FileQuestion,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -55,6 +56,7 @@ const verificationStyles = {
   verified: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
   pending: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
   unverified: 'bg-red-500/10 text-red-600 border-red-500/20',
+  documents_requested: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
 }
 
 const levelStyles = {
@@ -69,6 +71,7 @@ const verificationIcons = {
   verified: CheckCircle,
   pending: Clock,
   unverified: XCircle,
+  documents_requested: FileQuestion,
 }
 
 const levelLabels: Record<UserLevel, string> = {

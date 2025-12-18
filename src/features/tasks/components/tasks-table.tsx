@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
 import { useTableUrlState, type NavigateFn } from '@/hooks/use-table-url-state'
+import { ClipboardList } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -24,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { EmptyState } from '@/components/empty-state'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
 import { priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
@@ -198,12 +200,17 @@ export function TasksTable({ data }: DataTableProps) {
                 </TableRow>
               ))
             ) : (
-              <TableRow>
+              <TableRow className='hover:bg-transparent'>
                 <TableCell
                   colSpan={columns.length}
-                  className='h-24 text-center'
+                  className='h-48'
                 >
-                  No results.
+                  <EmptyState
+                    icon={ClipboardList}
+                    title='No tasks found'
+                    description='Try adjusting your filters or create a new task to get started.'
+                    size='sm'
+                  />
                 </TableCell>
               </TableRow>
             )}

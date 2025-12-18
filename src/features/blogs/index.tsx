@@ -9,7 +9,6 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { StatsCard } from '@/features/dashboard/components/stats-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -316,12 +315,6 @@ export function Blogs() {
   const [itemsPerPage] = useState(6)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Stats
-  const totalPosts = posts.length
-  const publishedPosts = posts.filter((p) => p.status === 'published').length
-  const draftPosts = posts.filter((p) => p.status === 'draft').length
-  const totalViews = posts.reduce((acc, p) => acc + p.views, 0)
-
   // Filter posts
   const filteredPosts = posts.filter((post) => {
     const matchesSearch =
@@ -500,34 +493,6 @@ export function Blogs() {
             <Plus className='mr-2 h-4 w-4' />
             New Post
           </Button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className='grid gap-4 md:grid-cols-4'>
-          <StatsCard
-            title='Total Posts'
-            value={totalPosts}
-            change={15}
-            description='all blog posts'
-          />
-          <StatsCard
-            title='Published'
-            value={publishedPosts}
-            change={8}
-            description='live posts'
-          />
-          <StatsCard
-            title='Drafts'
-            value={draftPosts}
-            change={-2}
-            description='unpublished'
-          />
-          <StatsCard
-            title='Total Views'
-            value={totalViews}
-            change={24}
-            description='all time'
-          />
         </div>
 
         {/* Filters and View Mode */}

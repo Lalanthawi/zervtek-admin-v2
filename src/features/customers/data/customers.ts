@@ -20,7 +20,7 @@ export interface Customer {
   wonAuctions: number
   lostAuctions: number
   activeBids: number
-  verificationStatus: 'verified' | 'pending' | 'unverified'
+  verificationStatus: 'verified' | 'pending' | 'unverified' | 'documents_requested'
   depositAmount: number
   outstandingBalance: number
   userLevel: UserLevel

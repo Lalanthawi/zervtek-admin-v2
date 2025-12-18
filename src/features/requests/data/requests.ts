@@ -1,4 +1,5 @@
 import { faker } from '@faker-js/faker'
+import { auctions } from '@/features/auctions/data/auctions'
 
 faker.seed(78901)
 
@@ -27,6 +28,23 @@ export interface RequestDocument {
   url: string
 }
 
+export interface InspectionMedia {
+  id: string
+  type: 'image' | 'video'
+  url: string
+  thumbnail?: string
+  note?: string
+  uploadedBy: string
+  uploadedAt: Date
+}
+
+export interface InspectionNote {
+  id: string
+  note: string
+  addedBy: string
+  addedAt: Date
+}
+
 export interface ServiceRequest {
   id: string
   requestId: string
@@ -50,6 +68,7 @@ export interface ServiceRequest {
     year: number
     vin?: string
   }
+  auctionId?: string // Link to auction for translation requests
   sourceLanguage?: string
   targetLanguage?: string
   documentType?: string
@@ -60,6 +79,9 @@ export interface ServiceRequest {
   price?: number
   createdAt: Date
   updatedAt: Date
+  // Inspection specific fields
+  inspectionMedia?: InspectionMedia[]
+  inspectionNotes?: InspectionNote[]
 }
 
 const makes = ['Toyota', 'Honda', 'BMW', 'Mercedes-Benz', 'Audi', 'Nissan', 'Lexus', 'Porsche']
@@ -91,15 +113,34 @@ const adminNames = [
 const fileTypes = ['application/pdf', 'image/jpeg', 'image/png']
 const fileNames = ['auction_sheet.pdf', 'vehicle_photos.zip', 'inspection_report.pdf', 'document.pdf', 'certificate.pdf']
 
+const inspectionNoteTexts = [
+  'Vehicle exterior is in excellent condition with no visible damage.',
+  'Minor scratches on the rear bumper, approximately 2cm.',
+  'Engine bay is clean with no signs of oil leaks.',
+  'Tires show approximately 60% tread remaining.',
+  'Interior is well maintained with minimal wear.',
+  'All electrical components tested and working properly.',
+  'Undercarriage inspection shows no rust or corrosion.',
+  'Brakes checked - front pads at 70%, rear at 80%.',
+  'Suspension components in good working order.',
+  'AC system blowing cold air as expected.',
+]
+
+// Track auction index for translation requests to ensure variety
+let translationAuctionIndex = 0
+
 export const requests: ServiceRequest[] = Array.from({ length: 120 }, (_, index) => {
   const type = faker.helpers.arrayElement(['inspection', 'translation']) as 'inspection' | 'translation'
   const customerName = faker.helpers.arrayElement(customerNames)
   const assigneeName = faker.helpers.maybe(() => faker.helpers.arrayElement(adminNames))
   const status = faker.helpers.arrayElement(['pending', 'assigned', 'in_progress', 'completed', 'cancelled'] as const)
 
-  const make = faker.helpers.arrayElement(makes)
-  const model = faker.helpers.arrayElement(models[make] || ['Model'])
-  const year = faker.number.int({ min: 2015, max: 2024 })
+  // For translation requests, link to an auction
+  const linkedAuction = type === 'translation' ? auctions[translationAuctionIndex++ % auctions.length] : null
+
+  const make = linkedAuction?.vehicleInfo.make || faker.helpers.arrayElement(makes)
+  const model = linkedAuction?.vehicleInfo.model || faker.helpers.arrayElement(models[make] || ['Model'])
+  const year = linkedAuction?.vehicleInfo.year || faker.number.int({ min: 2015, max: 2024 })
 
   // Generate threads
   const threadCount = faker.number.int({ min: 1, max: 5 })
@@ -138,13 +179,40 @@ export const requests: ServiceRequest[] = Array.from({ length: 120 }, (_, index)
 
   const basePrice = type === 'inspection' ? faker.number.int({ min: 100, max: 300 }) : faker.number.int({ min: 30, max: 100 })
 
+  // Generate title with vehicle info for translations
+  const translationType = faker.helpers.arrayElement(translationTypes)
+  const title = type === 'inspection'
+    ? `${faker.helpers.arrayElement(inspectionTypes)} - ${make} ${model}`
+    : `${translationType} - ${year} ${make} ${model}`
+
+  // Generate inspection media for inspection requests (only for in_progress or completed)
+  const inspectionMedia: InspectionMedia[] = type === 'inspection' && (status === 'in_progress' || status === 'completed')
+    ? Array.from({ length: faker.number.int({ min: 3, max: 8 }) }, () => ({
+        id: faker.string.uuid(),
+        type: faker.helpers.arrayElement(['image', 'image', 'image', 'video']) as 'image' | 'video',
+        url: faker.image.urlLoremFlickr({ category: 'car' }),
+        thumbnail: faker.image.urlLoremFlickr({ category: 'car', width: 150, height: 100 }),
+        note: faker.helpers.maybe(() => faker.helpers.arrayElement(inspectionNoteTexts)),
+        uploadedBy: faker.helpers.arrayElement(adminNames),
+        uploadedAt: faker.date.recent({ days: 7 }),
+      }))
+    : []
+
+  // Generate inspection notes for inspection requests
+  const inspectionNotes: InspectionNote[] = type === 'inspection' && (status === 'in_progress' || status === 'completed')
+    ? Array.from({ length: faker.number.int({ min: 1, max: 4 }) }, () => ({
+        id: faker.string.uuid(),
+        note: faker.helpers.arrayElement(inspectionNoteTexts),
+        addedBy: faker.helpers.arrayElement(adminNames),
+        addedAt: faker.date.recent({ days: 7 }),
+      })).sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime())
+    : []
+
   return {
     id: faker.string.uuid(),
     requestId: `REQ-${new Date().getFullYear()}-${String(index + 1).padStart(4, '0')}`,
     type,
-    title: type === 'inspection'
-      ? `${faker.helpers.arrayElement(inspectionTypes)} - ${make} ${model}`
-      : faker.helpers.arrayElement(translationTypes),
+    title,
     description: faker.lorem.sentence(),
     customerId: faker.string.uuid(),
     customerName,
@@ -159,13 +227,14 @@ export const requests: ServiceRequest[] = Array.from({ length: 120 }, (_, index)
       ? faker.date.soon({ days: 7 })
       : undefined,
     completedAt: status === 'completed' ? faker.date.past() : undefined,
-    vehicleInfo: type === 'inspection' ? {
+    vehicleInfo: {
       make,
       model,
       year,
-      vin: faker.vehicle.vin(),
-    } : undefined,
-    sourceLanguage: type === 'translation' ? faker.helpers.arrayElement(languages) : undefined,
+      vin: linkedAuction?.vehicleInfo.vin || faker.vehicle.vin(),
+    },
+    auctionId: linkedAuction?.id,
+    sourceLanguage: type === 'translation' ? 'Japanese' : undefined,
     targetLanguage: type === 'translation' ? 'English' : undefined,
     documentType: type === 'translation' ? faker.helpers.arrayElement(documentTypes) : undefined,
     attachments: [...(faker.helpers.maybe(() => [faker.image.url()]) || [])],
@@ -175,5 +244,7 @@ export const requests: ServiceRequest[] = Array.from({ length: 120 }, (_, index)
     price: basePrice,
     createdAt: faker.date.past({ years: 1 }),
     updatedAt: faker.date.recent({ days: 7 }),
+    inspectionMedia: inspectionMedia.length > 0 ? inspectionMedia : undefined,
+    inspectionNotes: inspectionNotes.length > 0 ? inspectionNotes : undefined,
   }
 }).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())

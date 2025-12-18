@@ -7,7 +7,6 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { StatsCard } from '@/features/dashboard/components/stats-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -76,12 +75,15 @@ import {
   Globe,
   Wallet,
   AlertCircle,
+  ShieldCheck,
+  FileQuestion,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 
 import { customers as initialCustomers, type Customer, type UserLevel } from './data/customers'
 import { CustomerProfileModal } from './components/customer-profile-modal'
+import { VerificationApprovalModal } from './components/verification-approval-modal'
 
 type SortField = 'name' | 'totalSpent' | 'createdAt' | 'lastActivity' | 'wonAuctions' | 'depositAmount'
 type SortOrder = 'asc' | 'desc'
@@ -94,6 +96,7 @@ const countries = [
 
 export function Customers() {
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers)
+  const [activeTab, setActiveTab] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [verificationFilter, setVerificationFilter] = useState<string>('all')
@@ -104,6 +107,8 @@ export function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false)
+  const [customerToApprove, setCustomerToApprove] = useState<Customer | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
 
@@ -126,6 +131,11 @@ export function Customers() {
       totalOutstanding,
       vipCustomers,
     }
+  }, [customers])
+
+  // Verification requests
+  const verificationRequests = useMemo(() => {
+    return customers.filter((c) => c.verificationStatus === 'pending')
   }, [customers])
 
   // Filter and sort
@@ -213,6 +223,7 @@ export function Customers() {
       verified: { label: 'Verified', className: 'bg-green-100 text-green-700', icon: CheckCircle },
       pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-700', icon: Clock },
       unverified: { label: 'Unverified', className: 'bg-red-100 text-red-700', icon: XCircle },
+      documents_requested: { label: 'Docs Requested', className: 'bg-blue-100 text-blue-700', icon: FileQuestion },
     }
     const Icon = config[status].icon
     return (
@@ -278,6 +289,54 @@ export function Customers() {
     toast.success(`${customer.name} has been verified`)
   }
 
+  const handleOpenApprovalModal = (customer: Customer) => {
+    setCustomerToApprove(customer)
+    setApprovalModalOpen(true)
+  }
+
+  const handleApproveVerification = (
+    customer: Customer,
+    data: {
+      userLevel: UserLevel
+      depositAmount?: number
+      notes?: string
+      status: 'active' | 'inactive' | 'suspended'
+    }
+  ) => {
+    setCustomers(customers.map((c) =>
+      c.id === customer.id
+        ? {
+            ...c,
+            verificationStatus: 'verified' as const,
+            userLevel: data.userLevel,
+            depositAmount: data.depositAmount ?? c.depositAmount,
+            notes: data.notes ?? c.notes,
+            status: data.status,
+          }
+        : c
+    ))
+    toast.success(`${customer.name} has been verified`, {
+      description: `User level set to ${data.userLevel.replace('_', ' ')}`,
+    })
+  }
+
+  const handleRequestDocuments = (customer: Customer, message?: string) => {
+    setCustomers(customers.map((c) =>
+      c.id === customer.id
+        ? {
+            ...c,
+            verificationStatus: 'documents_requested' as const,
+            notes: message
+              ? `[Document Request] ${message}${c.notes ? `\n\n${c.notes}` : ''}`
+              : c.notes,
+          }
+        : c
+    ))
+    toast.success(`Document request sent to ${customer.name}`, {
+      description: 'Verification status updated to Documents Requested',
+    })
+  }
+
   const handleChangeUserLevel = (customer: Customer, newLevel: UserLevel) => {
     setCustomers(customers.map((c) => (c.id === customer.id ? { ...c, userLevel: newLevel } : c)))
     if (selectedCustomer?.id === customer.id) {
@@ -328,14 +387,25 @@ export function Customers() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className='grid gap-4 md:grid-cols-4'>
-          <StatsCard title='Total Customers' value={stats.totalCustomers} change={12} description='registered users' />
-          <StatsCard title='Active Customers' value={stats.activeCustomers} change={8} description={`${Math.round((stats.activeCustomers / stats.totalCustomers) * 100)}% of total`} />
-          <StatsCard title='Total Revenue' value={stats.totalRevenue} change={15} prefix='¥' description='lifetime value' />
-          <StatsCard title='Business Tier' value={stats.vipCustomers} change={5} description='business customers' />
-        </div>
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className='space-y-4'>
+          <TabsList>
+            <TabsTrigger value='all' className='gap-2'>
+              <Users className='h-4 w-4' />
+              All Customers
+            </TabsTrigger>
+            <TabsTrigger value='verification' className='gap-2'>
+              <ShieldCheck className='h-4 w-4' />
+              Verification Requests
+              {verificationRequests.length > 0 && (
+                <Badge variant='secondary' className='ml-1 h-5 px-1.5'>
+                  {verificationRequests.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
+          <TabsContent value='all' className='space-y-4'>
         {/* Search and Filters */}
         <Card>
           <CardContent className='p-4'>
@@ -577,6 +647,92 @@ export function Customers() {
             </div>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value='verification' className='space-y-4'>
+            <Card>
+              <CardHeader>
+                <CardTitle className='flex items-center gap-2'>
+                  <ShieldCheck className='h-5 w-5' />
+                  Pending Verification Requests
+                </CardTitle>
+                <CardDescription>
+                  Review and approve customer verification requests
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {verificationRequests.length > 0 ? (
+                  <div className='space-y-4'>
+                    {verificationRequests.map((customer) => (
+                      <div key={customer.id} className='flex items-center justify-between rounded-lg border p-4'>
+                        <div className='flex items-center gap-4'>
+                          <Avatar className='h-12 w-12'>
+                            <AvatarFallback className='bg-primary/10 text-primary'>
+                              {customer.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className='flex items-center gap-2'>
+                              <span className='font-semibold'>{customer.name}</span>
+                              {getUserLevelBadge(customer.userLevel)}
+                            </div>
+                            <div className='text-muted-foreground text-sm'>{customer.email}</div>
+                            <div className='text-muted-foreground mt-1 flex items-center gap-4 text-xs'>
+                              <span className='flex items-center gap-1'>
+                                <Phone className='h-3 w-3' />
+                                {customer.phone}
+                              </span>
+                              <span className='flex items-center gap-1'>
+                                <MapPin className='h-3 w-3' />
+                                {customer.city}, {customer.country}
+                              </span>
+                              {customer.company && (
+                                <span className='flex items-center gap-1'>
+                                  <Building2 className='h-3 w-3' />
+                                  {customer.company}
+                                </span>
+                              )}
+                            </div>
+                            <div className='text-muted-foreground mt-1 text-xs'>
+                              Requested: {format(customer.createdAt, 'MMM d, yyyy')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className='flex items-center gap-2'>
+                          <Button variant='outline' size='sm' onClick={() => handleViewCustomer(customer)}>
+                            <Eye className='mr-2 h-4 w-4' />
+                            View Details
+                          </Button>
+                          <Button size='sm' onClick={() => handleOpenApprovalModal(customer)}>
+                            <CheckCircle className='mr-2 h-4 w-4' />
+                            Approve
+                          </Button>
+                          <Button variant='destructive' size='sm' onClick={() => {
+                            setCustomers(customers.map((c) =>
+                              c.id === customer.id ? { ...c, verificationStatus: 'unverified' as const } : c
+                            ))
+                            toast.success(`Verification request for ${customer.name} has been rejected`)
+                          }}>
+                            <XCircle className='mr-2 h-4 w-4' />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className='flex flex-col items-center justify-center py-12 text-center'>
+                    <ShieldCheck className='text-muted-foreground mb-4 h-12 w-12' />
+                    <h3 className='text-lg font-medium'>No Pending Requests</h3>
+                    <p className='text-muted-foreground text-sm'>
+                      All verification requests have been processed.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </Main>
 
       {/* View Customer Modal - Improved */}
@@ -588,6 +744,15 @@ export function Customers() {
         onCallCustomer={handleCallCustomer}
         onVerifyCustomer={handleVerifyCustomer}
         onChangeUserLevel={handleChangeUserLevel}
+      />
+
+      {/* Verification Approval Modal */}
+      <VerificationApprovalModal
+        customer={customerToApprove}
+        open={approvalModalOpen}
+        onOpenChange={setApprovalModalOpen}
+        onApprove={handleApproveVerification}
+        onRequestDocuments={handleRequestDocuments}
       />
 
       {/* Add Customer Dialog */}
