@@ -3,9 +3,8 @@
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
+import { HeaderActions } from '@/components/layout/header-actions'
 import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { MakesTable } from './components/makes-table'
 import { MakesPrimaryButtons } from './components/makes-primary-buttons'
 import { makesData } from './data/makes'
@@ -16,10 +15,9 @@ export function MakesSEO() {
       <Header fixed>
         <Search />
         <div className='ms-auto flex items-center space-x-4'>
-          <ThemeSwitch />
           <ConfigDrawer />
-          <ProfileDropdown />
         </div>
+        <HeaderActions />
       </Header>
 
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>

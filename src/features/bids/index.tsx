@@ -4,9 +4,8 @@ import { useState, useMemo } from 'react'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
+import { HeaderActions } from '@/components/layout/header-actions'
 import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -431,10 +430,9 @@ export function Bids() {
       <Header fixed>
         <Search />
         <div className='ms-auto flex items-center space-x-4'>
-          <ThemeSwitch />
           <ConfigDrawer />
-          <ProfileDropdown />
         </div>
+        <HeaderActions />
       </Header>
 
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
@@ -790,7 +788,7 @@ export function Bids() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date / Auction</TableHead>
+                    <TableHead>Auction</TableHead>
                     <TableHead>Vehicle</TableHead>
                     <TableHead>Bidder</TableHead>
                     <TableHead>Amount</TableHead>
@@ -809,10 +807,10 @@ export function Bids() {
                     >
                       <TableCell>
                         <div>
-                          <p className='font-medium'>{format(bid.timestamp, 'MMM dd, yyyy')}</p>
-                          <p className='text-xs text-muted-foreground'>{format(bid.timestamp, 'h:mm a')}</p>
-                          <p className='mt-1 text-xs text-muted-foreground'>
-                            {bid.auctionHouse} • Lot #{bid.lotNumber}
+                          <p className='font-medium'>Lot {bid.lotNumber}</p>
+                          <p className='text-sm font-medium'>{bid.auctionHouse}</p>
+                          <p className='text-sm'>
+                            {format(bid.timestamp, 'MMM dd, yyyy')}
                           </p>
                         </div>
                       </TableCell>

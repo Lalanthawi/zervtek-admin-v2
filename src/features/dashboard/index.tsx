@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Settings2,
   LayoutDashboard,
-  User,
+  UserCog,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { hasRole, MANAGEMENT_ROLES } from '@/lib/rbac'
 import { StatsCard } from './components/stats-card'
 import { DraggableChartsContainer } from './components/draggable-charts'
-import { UserDashboard } from './components/user-dashboard'
+import { StaffDashboard } from './components/staff-dashboard'
+import { NotificationBell } from '@/features/notifications/components/notification-bell'
 
 const statsConfig = [
   {
@@ -79,8 +80,8 @@ export function Dashboard() {
   // Check if user is admin/manager
   const isAdmin = user?.role ? hasRole(user.role, MANAGEMENT_ROLES) : false
 
-  // View state - non-admins always see user view
-  const [viewMode, setViewMode] = useState<'admin' | 'user'>(isAdmin ? 'admin' : 'user')
+  // View state - non-admins always see staff view
+  const [viewMode, setViewMode] = useState<'admin' | 'staff'>(isAdmin ? 'admin' : 'staff')
 
   const formatTimeAgo = (date: Date) => {
     const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000)
@@ -96,6 +97,7 @@ export function Dashboard() {
     <>
       <Header fixed>
         <div className='ms-auto flex items-center space-x-4'>
+          <NotificationBell />
           <ThemeSwitch />
           <ProfileDropdown />
         </div>
@@ -108,7 +110,7 @@ export function Dashboard() {
             <p className='text-muted-foreground'>
               {viewMode === 'admin'
                 ? 'Real-time overview of your auction platform'
-                : 'Your personal auction activity overview'}
+                : 'Your tasks, requests, and daily activities'}
             </p>
           </div>
           <div className='flex items-center gap-2'>
@@ -116,16 +118,16 @@ export function Dashboard() {
             {isAdmin && (
               <Tabs
                 value={viewMode}
-                onValueChange={(value) => setViewMode(value as 'admin' | 'user')}
+                onValueChange={(value) => setViewMode(value as 'admin' | 'staff')}
               >
                 <TabsList>
                   <TabsTrigger value='admin' className='gap-2'>
                     <LayoutDashboard className='h-4 w-4' />
                     Admin View
                   </TabsTrigger>
-                  <TabsTrigger value='user' className='gap-2'>
-                    <User className='h-4 w-4' />
-                    User View
+                  <TabsTrigger value='staff' className='gap-2'>
+                    <UserCog className='h-4 w-4' />
+                    Staff View
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -152,8 +154,8 @@ export function Dashboard() {
         </div>
 
         {/* Conditional Dashboard Content */}
-        {viewMode === 'user' ? (
-          <UserDashboard />
+        {viewMode === 'staff' ? (
+          <StaffDashboard />
         ) : (
           <>
             {/* Stats Cards */}

@@ -190,8 +190,8 @@ export const requests: ServiceRequest[] = Array.from({ length: 120 }, (_, index)
     ? Array.from({ length: faker.number.int({ min: 3, max: 8 }) }, () => ({
         id: faker.string.uuid(),
         type: faker.helpers.arrayElement(['image', 'image', 'image', 'video']) as 'image' | 'video',
-        url: faker.image.urlLoremFlickr({ category: 'car' }),
-        thumbnail: faker.image.urlLoremFlickr({ category: 'car', width: 150, height: 100 }),
+        url: faker.image.url(),
+        thumbnail: faker.image.url({ width: 150, height: 100 }),
         note: faker.helpers.maybe(() => faker.helpers.arrayElement(inspectionNoteTexts)),
         uploadedBy: faker.helpers.arrayElement(adminNames),
         uploadedAt: faker.date.recent({ days: 7 }),

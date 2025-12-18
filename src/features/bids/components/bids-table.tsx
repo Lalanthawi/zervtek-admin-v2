@@ -50,8 +50,8 @@ export function BidsTable({ data }: BidsTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Bid ID</TableHead>
-            <TableHead>Auction</TableHead>
+            <TableHead>Lot No / Auction House</TableHead>
+            <TableHead>Auction Date</TableHead>
             <TableHead>Vehicle</TableHead>
             <TableHead>Bidder</TableHead>
             <TableHead>Amount</TableHead>
@@ -63,8 +63,13 @@ export function BidsTable({ data }: BidsTableProps) {
         <TableBody>
           {data.slice(0, 20).map((bid) => (
             <TableRow key={bid.id}>
-              <TableCell className='font-medium'>{bid.bidNumber}</TableCell>
-              <TableCell className='text-muted-foreground'>{bid.auctionId}</TableCell>
+              <TableCell>
+                <div>
+                  <p className='font-medium'>Lot {bid.lotNumber}</p>
+                  <p className='text-sm text-muted-foreground'>{bid.auctionHouse}</p>
+                </div>
+              </TableCell>
+              <TableCell className='text-muted-foreground'>{format(bid.timestamp, 'MMM dd, yyyy')}</TableCell>
               <TableCell>
                 <div>
                   <p className='font-medium'>

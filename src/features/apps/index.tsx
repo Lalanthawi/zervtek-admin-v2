@@ -16,9 +16,8 @@ import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
+import { HeaderActions } from '@/components/layout/header-actions'
 import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { apps } from './data/apps'
 
 type AppType = 'all' | 'connected' | 'notConnected'
@@ -89,10 +88,9 @@ export function Apps() {
       <Header>
         <Search />
         <div className='ms-auto flex items-center gap-4'>
-          <ThemeSwitch />
           <ConfigDrawer />
-          <ProfileDropdown />
         </div>
+        <HeaderActions />
       </Header>
 
       {/* ===== Content ===== */}
