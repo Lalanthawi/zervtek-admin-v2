@@ -59,10 +59,19 @@ export const MOCK_USERS: Record<string, MockUser> = {
     role: [ROLES.CONTENT_MANAGER],
     exp: getExpiry(),
   },
-  // Multi-role user example
-  multiRole: {
+  backoffice: {
     id: '6',
     accountNo: 'ACC006',
+    email: 'backoffice@zervtek.com',
+    firstName: 'Backoffice',
+    lastName: 'Staff',
+    role: [ROLES.BACKOFFICE_STAFF],
+    exp: getExpiry(),
+  },
+  // Multi-role user example
+  multiRole: {
+    id: '7',
+    accountNo: 'ACC007',
     email: 'multi@zervtek.com',
     firstName: 'Multi',
     lastName: 'Role',

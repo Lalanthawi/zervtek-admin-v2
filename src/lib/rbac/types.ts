@@ -7,6 +7,7 @@ export const ROLES = {
   SALES_STAFF: 'sales_staff',
   ACCOUNTANT: 'accountant',
   CONTENT_MANAGER: 'content_manager',
+  BACKOFFICE_STAFF: 'backoffice_staff',
 } as const
 
 export type Role = (typeof ROLES)[keyof typeof ROLES]
@@ -18,6 +19,7 @@ export const ROLE_HIERARCHY: Record<Role, number> = {
   sales_staff: 2,
   accountant: 2,
   content_manager: 2,
+  backoffice_staff: 2,
 }
 
 // Route access configuration type

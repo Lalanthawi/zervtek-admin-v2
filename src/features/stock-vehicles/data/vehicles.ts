@@ -87,7 +87,7 @@ export const vendorPartners = [
   { name: 'Fukuoka Auto Partners', contact: '+81-92-5555-6666' },
 ]
 
-// Vendor stock vehicles (test data)
+// Zervtek stock vehicles (test data)
 export const vendorVehicles: Vehicle[] = [
   {
     id: 'vendor-001',

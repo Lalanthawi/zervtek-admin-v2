@@ -5,6 +5,7 @@ const ALL_ROLES: Role[] = Object.values(ROLES) as Role[]
 const SALES_ROLES: Role[] = [ROLES.ADMIN, ROLES.MANAGER, ROLES.SALES_STAFF]
 const FINANCE_ROLES: Role[] = [ROLES.ADMIN, ROLES.MANAGER, ROLES.ACCOUNTANT]
 const CONTENT_ROLES: Role[] = [ROLES.ADMIN, ROLES.MANAGER, ROLES.CONTENT_MANAGER]
+const BACKOFFICE_ROLES: Role[] = [ROLES.ADMIN, ROLES.MANAGER, ROLES.BACKOFFICE_STAFF]
 const MANAGEMENT_ROLES: Role[] = [ROLES.ADMIN, ROLES.MANAGER]
 const ADMIN_ONLY: Role[] = [ROLES.ADMIN]
 
@@ -30,6 +31,11 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/blogs', roles: CONTENT_ROLES },
   { path: '/admin/makes', roles: CONTENT_ROLES },
   { path: '/admin/models', roles: CONTENT_ROLES },
+
+  // Backoffice section
+  { path: '/translations', roles: BACKOFFICE_ROLES },
+  { path: '/inspections', roles: BACKOFFICE_ROLES },
+  { path: '/inquiries', roles: BACKOFFICE_ROLES },
 
   // Communication section
   { path: '/whatsapp', roles: MANAGEMENT_ROLES },
@@ -103,6 +109,7 @@ export {
   SALES_ROLES,
   FINANCE_ROLES,
   CONTENT_ROLES,
+  BACKOFFICE_ROLES,
   MANAGEMENT_ROLES,
   ADMIN_ONLY,
 }

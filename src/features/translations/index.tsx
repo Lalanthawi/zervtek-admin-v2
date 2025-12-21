@@ -1,30 +1,31 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import {
+  Clock,
   CheckCircle,
-  Languages,
-  Save,
-  Zap,
-  FileCheck,
-  ClipboardList,
-  UserPlus,
-  User,
-  Users,
-  ZoomIn,
-  ZoomOut,
-  RotateCw,
-  Maximize2,
-  Car,
+  Send,
+  Search as SearchIcon,
   ChevronLeft,
   ChevronRight,
-  Gauge,
+  Languages,
+  User,
+  Copy,
+  Check,
+  Car,
+  Building2,
   Calendar,
-  Palette,
-  Hash,
+  Star,
+  FileText,
+  Loader2,
+  Upload,
+  X,
+  ImageIcon,
+  ZoomIn,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -32,7 +33,7 @@ import { HeaderActions } from '@/components/layout/header-actions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -40,7 +41,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { Search } from '@/components/search'
 import {
@@ -50,7 +50,6 @@ import {
 
 import { requests as allRequests, type ServiceRequest } from '../requests/data/requests'
 import { auctions, type Auction } from '../auctions/data/auctions'
-import { AssignTranslatorDrawer } from './components/assign-translator-drawer'
 import { cn } from '@/lib/utils'
 
 // Create auction lookup map
@@ -62,222 +61,241 @@ const getAuctionForRequest = (request: ServiceRequest): Auction | undefined => {
   return auctionMap.get(request.auctionId)
 }
 
-const CURRENT_USER_ID = 'admin1'
-const CURRENT_USER_NAME = 'Current Admin'
-// Simulated current user role - in real app, this comes from auth context
-// 'admin' | 'manager' | 'superadmin' can assign others
-// 'cashier' can only assign to themselves
-const CURRENT_USER_ROLE: 'superadmin' | 'admin' | 'manager' | 'cashier' = 'admin'
+// Filter to only auction sheet translation requests
+const initialRequests = allRequests.filter(r => r.type === 'translation' && r.title.includes('Auction Sheet'))
 
-const canAssignOthers = ['superadmin', 'admin', 'manager'].includes(CURRENT_USER_ROLE)
+// Get days since creation for time-based styling
+const getDaysOld = (createdAt: Date): number => {
+  const diffMs = new Date().getTime() - new Date(createdAt).getTime()
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
 
-// Filter to only translation requests
-const initialRequests = allRequests.filter(r => r.type === 'translation')
+// Get time badge color based on age - subtle approach
+const getTimeBadgeStyle = (createdAt: Date): string => {
+  const days = getDaysOld(createdAt)
+  if (days >= 14) return 'text-red-500'
+  if (days >= 7) return 'text-amber-500'
+  return 'text-muted-foreground'
+}
 
-type TranslationType = 'all' | 'auction_sheet' | 'export_certificate' | 'my_tasks'
+// Status steps for visual stepper
+const statusSteps = [
+  { key: 'pending', label: 'Requested', icon: FileText },
+  { key: 'in_progress', label: 'Translating', icon: Languages },
+  { key: 'completed', label: 'Completed', icon: CheckCircle },
+]
 
 export function Translations() {
   const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests)
-  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(initialRequests[0] || null)
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [translationType, setTranslationType] = useState<TranslationType>('all')
-
-  // Translation editor state
-  const [translationText, setTranslationText] = useState('')
-  const [imageZoom, setImageZoom] = useState(100)
-  const [imageRotation, setImageRotation] = useState(0)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [assignDrawerOpen, setAssignDrawerOpen] = useState(false)
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [sortBy, setSortBy] = useState<string>('newest')
+  const [replyText, setReplyText] = useState('')
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const ITEMS_PER_PAGE = 10
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [isSending, setIsSending] = useState(false)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const MAX_CHARACTERS = 2000
+  const ITEMS_PER_PAGE = 12
 
   // Get auction for selected request
   const selectedAuction = selectedRequest ? getAuctionForRequest(selectedRequest) : undefined
-  const vehicleImages = selectedAuction?.vehicleInfo.images || []
 
-  // Compute counts for tabs
-  const counts = useMemo(() => {
-    const all = requests.length
-    const auctionSheet = requests.filter(r => r.title.includes('Auction Sheet')).length
-    const exportCert = requests.filter(r => r.title.includes('Export Certificate')).length
-    const myTasks = requests.filter(r => r.assignedTo === CURRENT_USER_ID).length
-    return { all, auctionSheet, exportCert, myTasks }
-  }, [requests])
-
-  const filteredRequests = useMemo(() => {
-    return requests.filter((request) => {
-      const matchesSearch =
-        request.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.requestId.toLowerCase().includes(searchQuery.toLowerCase())
-
-      const matchesStatus = statusFilter === 'all' || request.status === statusFilter
-
-      const matchesType = translationType === 'all' ||
-        translationType === 'my_tasks' ||
-        (translationType === 'auction_sheet' && request.title.includes('Auction Sheet')) ||
-        (translationType === 'export_certificate' && request.title.includes('Export Certificate'))
-
-      const matchesMyTasks = translationType !== 'my_tasks' || request.assignedTo === CURRENT_USER_ID
-
-      return matchesSearch && matchesStatus && matchesType && matchesMyTasks
-    })
-  }, [requests, searchQuery, statusFilter, translationType])
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredRequests.length / ITEMS_PER_PAGE)
-  const paginatedRequests = useMemo(() => {
-    return filteredRequests.slice(
-      (currentPage - 1) * ITEMS_PER_PAGE,
-      currentPage * ITEMS_PER_PAGE
-    )
-  }, [filteredRequests, currentPage, ITEMS_PER_PAGE])
-
-  // Reset page when filters change
+  // Keyboard shortcut for sending (Cmd/Ctrl + Enter)
   useEffect(() => {
-    setCurrentPage(1)
-  }, [searchQuery, statusFilter, translationType])
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && isModalOpen && replyText.trim()) {
+        e.preventDefault()
+        handleSendTranslation()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isModalOpen, replyText])
 
-  const handleSelectRequest = (request: ServiceRequest) => {
-    setSelectedRequest(request)
-    // Load existing translation if any (in real app, this would come from the request data)
-    setTranslationText('')
-    setImageZoom(100)
-    setImageRotation(0)
-    setSelectedImageIndex(0)
-  }
+  // Filtered and sorted requests
+  const filteredRequests = useMemo(() => {
+    let result = [...requests]
 
-  const handleAssignToMe = (request: ServiceRequest) => {
-    const updated = requests.map((r) =>
-      r.id === request.id
-        ? { ...r, assignedTo: CURRENT_USER_ID, assignedToName: CURRENT_USER_NAME, status: 'assigned' as const }
-        : r
-    )
-    setRequests(updated)
-    setSelectedRequest({ ...request, assignedTo: CURRENT_USER_ID, assignedToName: CURRENT_USER_NAME, status: 'assigned' })
-    toast.success(`Request ${request.requestId} assigned to you`)
-  }
+    // Status filter
+    if (statusFilter === 'pending') {
+      result = result.filter(r => r.status === 'pending')
+    } else if (statusFilter === 'completed') {
+      result = result.filter(r => r.status === 'completed')
+    }
 
-  const handleAssignStaff = (staffId: string, staffName: string) => {
-    if (!selectedRequest) return
-    const updated = requests.map((r) =>
-      r.id === selectedRequest.id
-        ? { ...r, assignedTo: staffId, assignedToName: staffName, status: 'assigned' as const }
-        : r
-    )
-    setRequests(updated)
-    setSelectedRequest({ ...selectedRequest, assignedTo: staffId, assignedToName: staffName, status: 'assigned' })
-  }
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(r => {
+        const auction = getAuctionForRequest(r)
+        const vehicleName = auction
+          ? `${auction.vehicleInfo.year} ${auction.vehicleInfo.make} ${auction.vehicleInfo.model}`
+          : r.title
+        return (
+          vehicleName.toLowerCase().includes(query) ||
+          r.customerName.toLowerCase().includes(query) ||
+          auction?.lotNumber.toLowerCase().includes(query) ||
+          auction?.auctionHouse.toLowerCase().includes(query)
+        )
+      })
+    }
 
-  const handleSaveDraft = () => {
-    if (!selectedRequest || !translationText.trim()) return
-    toast.success('Translation draft saved')
-  }
+    // Sort
+    if (sortBy === 'newest') {
+      result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    } else if (sortBy === 'oldest') {
+      result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    } else if (sortBy === 'urgent') {
+      result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    }
 
-  const handleStartTranslation = () => {
-    if (!selectedRequest) return
-    const updated = requests.map((r) =>
-      r.id === selectedRequest.id
-        ? { ...r, status: 'in_progress' as const, updatedAt: new Date() }
-        : r
-    )
-    setRequests(updated)
-    setSelectedRequest({ ...selectedRequest, status: 'in_progress', updatedAt: new Date() })
-    toast.success('Translation started')
-  }
+    return result
+  }, [requests, searchQuery, statusFilter, sortBy])
 
-  const handleCompleteTranslation = () => {
-    if (!selectedRequest || !translationText.trim()) {
-      toast.error('Please enter the translation before completing')
+  // Pagination
+  const totalPages = Math.ceil(filteredRequests.length / ITEMS_PER_PAGE)
+  const paginatedRequests = filteredRequests.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  )
+
+  // File upload handlers
+  const handleFileUpload = (file: File) => {
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+    if (!validTypes.includes(file.type)) {
+      toast.error('Invalid file type. Please upload an image or PDF.')
       return
     }
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large. Maximum size is 10MB.')
+      return
+    }
+    setUploadedFile(file)
+    // Create preview URL
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    toast.success('Auction sheet uploaded successfully')
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      handleFileUpload(files[0])
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      handleFileUpload(files[0])
+    }
+  }
+
+  const removeUploadedFile = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+    }
+    setUploadedFile(null)
+    setPreviewUrl(null)
+  }
+
+  // Handlers
+  const handleCardClick = (request: ServiceRequest) => {
+    setSelectedRequest(request)
+    setReplyText('')
+    setCopiedField(null)
+    removeUploadedFile()
+    setIsModalOpen(true)
+  }
+
+  const handleCopy = async (text: string, field: string) => {
+    await navigator.clipboard.writeText(text)
+    setCopiedField(field)
+    toast.success('Copied to clipboard')
+    setTimeout(() => setCopiedField(null), 2000)
+  }
+
+  const handleSendTranslation = async () => {
+    if (!selectedRequest || !replyText.trim()) {
+      toast.error('Please enter the translation before sending')
+      return
+    }
+
+    setIsSending(true)
+
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 800))
+
     const updated = requests.map((r) =>
       r.id === selectedRequest.id
         ? { ...r, status: 'completed' as const, updatedAt: new Date(), completedAt: new Date() }
         : r
     )
     setRequests(updated)
-    setSelectedRequest({ ...selectedRequest, status: 'completed', updatedAt: new Date(), completedAt: new Date() })
-    toast.success('Translation completed and sent to customer')
+    setIsSending(false)
+    setIsModalOpen(false)
+    setSelectedRequest(null)
+    setReplyText('')
+    toast.success('Translation sent successfully!')
   }
 
-  // Priority colors
-  const getPriorityColor = (priority: ServiceRequest['priority']) => {
-    const colors = {
-      urgent: 'bg-red-500',
-      high: 'bg-orange-500',
-      medium: 'bg-amber-500',
-      low: 'bg-slate-400',
-    }
-    return colors[priority]
-  }
-
-  const getPriorityVariant = (priority: ServiceRequest['priority']) => {
-    const variants = {
-      urgent: 'red',
-      high: 'orange',
-      medium: 'amber',
-      low: 'zinc',
-    }
-    return variants[priority]
-  }
-
-  const getStatusVariant = (status: ServiceRequest['status']) => {
-    const variants = {
-      completed: 'emerald',
-      in_progress: 'blue',
-      assigned: 'violet',
-      pending: 'amber',
-      cancelled: 'zinc',
-    }
-    return variants[status]
-  }
-
-  const getTypeIcon = (title: string) => {
-    if (title.includes('Auction Sheet')) {
-      return <ClipboardList className='h-4 w-4' />
-    }
-    return <FileCheck className='h-4 w-4' />
-  }
-
-  const getTypeLabel = (title: string) => {
-    return title.includes('Auction Sheet') ? 'Auction Sheet' : 'Export Certificate'
-  }
-
-  const getRelativeTime = (date: Date) => {
-    const now = new Date()
-    const diffInHours = Math.floor((now.getTime() - new Date(date).getTime()) / (1000 * 60 * 60))
-    if (diffInHours < 1) return 'Just now'
-    if (diffInHours < 24) return `${diffInHours}h ago`
-    const diffInDays = Math.floor(diffInHours / 24)
-    if (diffInDays === 1) return 'Yesterday'
-    if (diffInDays < 7) return `${diffInDays}d ago`
-    return format(new Date(date), 'MMM dd')
-  }
-
-  // Get vehicle name from request
-  const getVehicleName = (request: ServiceRequest) => {
-    if (request.vehicleInfo) {
-      return `${request.vehicleInfo.year} ${request.vehicleInfo.make} ${request.vehicleInfo.model}`
-    }
-    return 'Unknown Vehicle'
-  }
-
-  // Get vehicle thumbnail
-  const getVehicleThumbnail = (request: ServiceRequest) => {
+  // Get vehicle info
+  const getVehicleInfo = (request: ServiceRequest) => {
     const auction = getAuctionForRequest(request)
-    return auction?.vehicleInfo.images[0]
+    if (auction) {
+      return {
+        name: `${auction.vehicleInfo.year} ${auction.vehicleInfo.make} ${auction.vehicleInfo.model}`,
+        lotNo: auction.lotNumber,
+        auctionHouse: auction.auctionHouse,
+        date: format(new Date(auction.startTime), 'MMM dd, yyyy'),
+        grade: auction.vehicleInfo.grade || 'N/A',
+        extGrade: auction.vehicleInfo.exteriorGrade || 'N/A',
+        intGrade: auction.vehicleInfo.interiorGrade || 'N/A',
+      }
+    }
+    return {
+      name: request.title.replace('Auction Sheet Translation - ', ''),
+      lotNo: 'N/A',
+      auctionHouse: 'N/A',
+      date: 'N/A',
+      grade: 'N/A',
+      extGrade: 'N/A',
+      intGrade: 'N/A',
+    }
   }
 
-  // Navigate images
-  const handlePrevImage = () => {
-    setSelectedImageIndex((prev) => (prev === 0 ? vehicleImages.length - 1 : prev - 1))
+  const getWaitTime = (createdAt: Date) => {
+    return formatDistanceToNow(new Date(createdAt), { addSuffix: false })
   }
 
-  const handleNextImage = () => {
-    setSelectedImageIndex((prev) => (prev === vehicleImages.length - 1 ? 0 : prev + 1))
+  // Get current step index for stepper
+  const getCurrentStep = (status: string) => {
+    if (status === 'completed') return 2
+    if (status === 'in_progress') return 1
+    return 0
   }
 
   return (
@@ -287,522 +305,551 @@ export function Translations() {
         <HeaderActions />
       </Header>
 
-      <Main className='flex flex-1 flex-col gap-4 p-4 sm:p-6'>
-        {/* Header */}
-        <div className='flex flex-wrap items-center justify-between gap-2'>
-          <div>
-            <h2 className='text-2xl font-bold tracking-tight'>Translations</h2>
-            <p className='text-muted-foreground text-sm'>Translate auction documents for customers</p>
+      <Main className='flex flex-1 flex-col gap-6 p-4 sm:p-6'>
+        {/* Page Header */}
+        <div className='flex flex-wrap items-center justify-between gap-4'>
+          <div className='flex items-center gap-3'>
+            <div className='h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center'>
+              <Languages className='h-5 w-5 text-primary' />
+            </div>
+            <div>
+              <h1 className='text-2xl font-bold tracking-tight'>Translation Tickets</h1>
+              <p className='text-muted-foreground text-sm'>Auction sheet translation requests</p>
+            </div>
           </div>
         </div>
 
-        {/* Filters Row */}
+        {/* Filters */}
         <div className='flex flex-wrap items-center gap-3'>
-          <Tabs value={translationType} onValueChange={(v) => setTranslationType(v as TranslationType)}>
-            <TabsList>
-              <TabsTrigger value='all'>All ({counts.all})</TabsTrigger>
-              <TabsTrigger value='auction_sheet'>Auction Sheet ({counts.auctionSheet})</TabsTrigger>
-              <TabsTrigger value='export_certificate'>Export Cert ({counts.exportCert})</TabsTrigger>
-              <TabsTrigger value='my_tasks' className='gap-1.5'>
-                <User className='h-4 w-4' />
-                My Tasks ({counts.myTasks})
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className='relative flex-1 min-w-[200px] max-w-md'>
+            <SearchIcon className='text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2' />
+            <Input
+              placeholder='Search by vehicle, lot, customer...'
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1) }}
+              className='pl-10'
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1) }}>
+            <SelectTrigger className='w-[140px]'>
+              <SelectValue placeholder='Status' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>All Tickets</SelectItem>
+              <SelectItem value='pending'>Pending</SelectItem>
+              <SelectItem value='completed'>Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className='w-[140px]'>
+              <SelectValue placeholder='Sort' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='newest'>Newest First</SelectItem>
+              <SelectItem value='oldest'>Oldest First</SelectItem>
+              <SelectItem value='urgent'>Most Urgent</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Split Panel Layout */}
-        <div className='flex flex-1 gap-4 min-h-0'>
-          {/* Left Panel - Request Queue */}
-          <div className='w-[320px] flex-shrink-0 flex flex-col border rounded-lg bg-card'>
-            {/* Search & Filter */}
-            <div className='p-3 border-b space-y-2'>
-              <Input
-                placeholder='Search requests...'
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className='h-9'
-              />
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className='h-8 text-xs'>
-                  <SelectValue placeholder='All Status' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='all'>All Status</SelectItem>
-                  <SelectItem value='pending'>Pending</SelectItem>
-                  <SelectItem value='assigned'>Assigned</SelectItem>
-                  <SelectItem value='in_progress'>In Progress</SelectItem>
-                  <SelectItem value='completed'>Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        {/* Ticket Grid */}
+        {paginatedRequests.length > 0 ? (
+          <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'>
+            {paginatedRequests.map((request, index) => {
+              const vehicleInfo = getVehicleInfo(request)
+              const isCompleted = request.status === 'completed'
+              const isPending = request.status === 'pending'
 
-            {/* Request List */}
-            <ScrollArea className='flex-1'>
-              <div className='p-2 space-y-2'>
-                {paginatedRequests.map((request) => {
-                  const thumbnail = getVehicleThumbnail(request)
-                  return (
-                    <div
-                      key={request.id}
-                      onClick={() => handleSelectRequest(request)}
-                      className={cn(
-                        'p-3 rounded-lg cursor-pointer transition-all border',
-                        selectedRequest?.id === request.id
-                          ? 'bg-primary/5 border-primary/30 shadow-sm'
-                          : 'bg-card hover:bg-muted/50 border-transparent hover:border-border'
+              return (
+                <motion.div
+                  key={request.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Card
+                    className={cn(
+                      'relative cursor-pointer rounded-xl border-border/50 bg-card shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5',
+                      isCompleted && 'opacity-60'
+                    )}
+                    onClick={() => handleCardClick(request)}
+                  >
+                    <CardContent className='p-5'>
+                      {isPending && (
+                        <span className='absolute top-4 right-4 size-2.5 rounded-full bg-blue-500 ring-2 ring-background' />
                       )}
-                    >
-                      <div className='flex items-start gap-3'>
-                        {/* Vehicle Thumbnail with Priority Dot */}
-                        <div className='relative flex-shrink-0'>
-                          {thumbnail ? (
-                            <img
-                              src={thumbnail}
-                              alt='Vehicle'
-                              className='w-11 h-11 rounded-lg object-cover'
-                            />
-                          ) : (
-                            <div className='w-11 h-11 rounded-lg bg-muted flex items-center justify-center'>
-                              <Car className='h-5 w-5 text-muted-foreground' />
-                            </div>
-                          )}
-                          {/* Priority Dot */}
-                          <div
-                            className={cn(
-                              'absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-card',
-                              getPriorityColor(request.priority)
-                            )}
-                          />
-                        </div>
 
-                        {/* Content */}
-                        <div className='flex-1 min-w-0'>
-                          <div className='flex items-start justify-between gap-2'>
-                            <span className='font-medium text-sm truncate'>{getVehicleName(request)}</span>
-                            <span className='text-[10px] text-muted-foreground whitespace-nowrap'>
-                              {getRelativeTime(request.createdAt)}
+                      <h3 className={cn(
+                        'text-sm line-clamp-1 pr-4',
+                        isCompleted ? 'font-normal text-muted-foreground' : 'font-medium text-foreground'
+                      )}>
+                        {vehicleInfo.name}
+                      </h3>
+
+                      <div className='mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground'>
+                        <span className='font-mono'>{vehicleInfo.lotNo}</span>
+                        <span className='text-muted-foreground/40'>•</span>
+                        <span className='truncate'>{vehicleInfo.auctionHouse}</span>
+                      </div>
+
+                      <div className='mt-4 flex items-center justify-between'>
+                        <div className='flex items-center gap-2'>
+                          <div className='size-7 rounded-full bg-primary/10 flex items-center justify-center'>
+                            <span className='text-xs font-medium text-primary'>
+                              {request.customerName.charAt(0).toUpperCase()}
                             </span>
                           </div>
-                          <p className='text-xs text-muted-foreground truncate mt-0.5'>
-                            {request.customerName} • {getTypeLabel(request.title)}
-                          </p>
-                          <div className='flex items-center gap-2 mt-1.5'>
-                            <Badge variant={getStatusVariant(request.status) as any} className='text-[10px] px-1.5 h-5'>
-                              {request.status.replace('_', ' ')}
-                            </Badge>
-                            {request.assignedToName && (
-                              <span className='text-[10px] text-muted-foreground flex items-center gap-1'>
-                                <User className='h-3 w-3' />
-                                {request.assignedToName.split(' ')[0]}
-                              </span>
-                            )}
-                          </div>
+                          <span className='text-xs text-muted-foreground truncate max-w-[80px]'>
+                            {request.customerName.split(' ')[0]}
+                          </span>
                         </div>
-                      </div>
-                    </div>
-                  )
-                })}
-
-                {paginatedRequests.length === 0 && (
-                  <div className='p-8 text-center text-muted-foreground'>
-                    <Languages className='h-8 w-8 mx-auto mb-2 opacity-50' />
-                    <p className='text-sm'>No requests found</p>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-
-            {/* Pagination Controls */}
-            {filteredRequests.length > 0 && (
-              <div className='p-3 border-t bg-muted/30'>
-                <div className='flex items-center justify-between'>
-                  <span className='text-xs text-muted-foreground'>
-                    {filteredRequests.length} request{filteredRequests.length !== 1 ? 's' : ''}
-                  </span>
-                  <div className='flex items-center gap-2'>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-7 w-7'
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className='h-4 w-4' />
-                    </Button>
-                    <span className='text-xs text-muted-foreground min-w-[80px] text-center'>
-                      Page {currentPage} of {totalPages || 1}
-                    </span>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-7 w-7'
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage >= totalPages}
-                    >
-                      <ChevronRight className='h-4 w-4' />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right Panel - Translation Editor */}
-          <div className='flex-1 flex flex-col border rounded-lg bg-card min-w-0 overflow-hidden'>
-            {selectedRequest ? (
-              <>
-                {/* Header */}
-                <div className='p-4 border-b flex-shrink-0'>
-                  <div className='flex items-start justify-between gap-4'>
-                    <div className='space-y-1'>
-                      <div className='flex items-center gap-2'>
-                        <Car className='h-5 w-5 text-muted-foreground' />
-                        <h3 className='font-semibold'>{getVehicleName(selectedRequest)}</h3>
-                        <Badge variant={getStatusVariant(selectedRequest.status) as any}>
-                          {selectedRequest.status.replace('_', ' ')}
-                        </Badge>
-                      </div>
-                      <div className='flex items-center gap-3 text-sm text-muted-foreground'>
-                        <span>{getTypeLabel(selectedRequest.title)}</span>
-                        <span>•</span>
-                        <span>{selectedRequest.customerName}</span>
-                        <span>•</span>
-                        <span className='font-mono text-xs'>{selectedRequest.requestId}</span>
-                        <span>•</span>
-                        <Badge variant={getPriorityVariant(selectedRequest.priority) as any} className='capitalize'>
-                          {selectedRequest.priority}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className='flex items-center gap-2'>
-                      {!selectedRequest.assignedTo && (
-                        canAssignOthers ? (
-                          <>
-                            <Button size='sm' variant='outline' onClick={() => handleAssignToMe(selectedRequest)}>
-                              <UserPlus className='h-4 w-4 mr-1.5' />
-                              My Task
-                            </Button>
-                            <Button size='sm' variant='outline' onClick={() => setAssignDrawerOpen(true)}>
-                              <Users className='h-4 w-4 mr-1.5' />
-                              Assign Staff
-                            </Button>
-                          </>
+                        {isCompleted ? (
+                          <Badge variant='emerald' className='text-[10px]'>
+                            <CheckCircle className='h-3 w-3 mr-1' />
+                            Done
+                          </Badge>
                         ) : (
-                          <Button size='sm' variant='outline' onClick={() => handleAssignToMe(selectedRequest)}>
-                            <UserPlus className='h-4 w-4 mr-1.5' />
-                            Assign to Me
-                          </Button>
-                        )
-                      )}
-                      {selectedRequest.status === 'pending' && selectedRequest.assignedTo && (
-                        <Button size='sm' onClick={handleStartTranslation}>
-                          <Zap className='h-4 w-4 mr-1.5' />
-                          Start Translation
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Content Area - Split View */}
-                <div className='flex-1 flex flex-col min-h-0'>
-                  <div className='flex-1 flex min-h-0'>
-                    {/* Vehicle Images */}
-                    <div className='w-1/2 border-r flex flex-col'>
-                      <div className='p-2 border-b bg-muted/30 flex items-center justify-between'>
-                        <span className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>
-                          Vehicle Images {vehicleImages.length > 0 && `(${selectedImageIndex + 1}/${vehicleImages.length})`}
-                        </span>
-                        <div className='flex items-center gap-1'>
-                          <Button
-                            variant='ghost'
-                            size='icon'
-                            className='h-7 w-7'
-                            onClick={() => setImageZoom(Math.max(50, imageZoom - 25))}
-                          >
-                            <ZoomOut className='h-3.5 w-3.5' />
-                          </Button>
-                          <span className='text-xs text-muted-foreground w-12 text-center'>{imageZoom}%</span>
-                          <Button
-                            variant='ghost'
-                            size='icon'
-                            className='h-7 w-7'
-                            onClick={() => setImageZoom(Math.min(200, imageZoom + 25))}
-                          >
-                            <ZoomIn className='h-3.5 w-3.5' />
-                          </Button>
-                          <Button
-                            variant='ghost'
-                            size='icon'
-                            className='h-7 w-7'
-                            onClick={() => setImageRotation((r) => (r + 90) % 360)}
-                          >
-                            <RotateCw className='h-3.5 w-3.5' />
-                          </Button>
-                          <Button
-                            variant='ghost'
-                            size='icon'
-                            className='h-7 w-7'
-                            onClick={() => setIsFullscreen(true)}
-                          >
-                            <Maximize2 className='h-3.5 w-3.5' />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Main Image with Navigation */}
-                      <div className='flex-1 relative flex items-center justify-center bg-muted/20 overflow-hidden'>
-                        {vehicleImages.length > 0 ? (
-                          <>
-                            <img
-                              src={vehicleImages[selectedImageIndex]}
-                              alt={`Vehicle ${selectedImageIndex + 1}`}
-                              className='max-w-full max-h-full object-contain transition-transform duration-200'
-                              style={{
-                                transform: `scale(${imageZoom / 100}) rotate(${imageRotation}deg)`,
-                              }}
-                            />
-                            {/* Navigation Arrows */}
-                            {vehicleImages.length > 1 && (
-                              <>
-                                <Button
-                                  variant='secondary'
-                                  size='icon'
-                                  className='absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-80 hover:opacity-100'
-                                  onClick={handlePrevImage}
-                                >
-                                  <ChevronLeft className='h-5 w-5' />
-                                </Button>
-                                <Button
-                                  variant='secondary'
-                                  size='icon'
-                                  className='absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full opacity-80 hover:opacity-100'
-                                  onClick={handleNextImage}
-                                >
-                                  <ChevronRight className='h-5 w-5' />
-                                </Button>
-                              </>
-                            )}
-                          </>
-                        ) : (
-                          <div className='text-center text-muted-foreground'>
-                            <Car className='h-16 w-16 mx-auto mb-2 opacity-30' />
-                            <p className='text-sm'>No images available</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Thumbnail Strip */}
-                      {vehicleImages.length > 1 && (
-                        <div className='p-2 border-t bg-muted/30'>
-                          <div className='flex gap-2 overflow-x-auto'>
-                            {vehicleImages.slice(0, 8).map((img, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => setSelectedImageIndex(idx)}
-                                className={cn(
-                                  'flex-shrink-0 w-14 h-10 rounded-md overflow-hidden border-2 transition-all',
-                                  selectedImageIndex === idx
-                                    ? 'border-primary ring-1 ring-primary'
-                                    : 'border-transparent opacity-60 hover:opacity-100'
-                                )}
-                              >
-                                <img src={img} alt={`Thumb ${idx + 1}`} className='w-full h-full object-cover' />
-                              </button>
-                            ))}
-                            {vehicleImages.length > 8 && (
-                              <div className='flex-shrink-0 w-14 h-10 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground'>
-                                +{vehicleImages.length - 8}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                  {/* Translation Input */}
-                  <div className='w-1/2 flex flex-col'>
-                    <div className='p-2 border-b bg-muted/30'>
-                      <span className='text-xs font-medium text-muted-foreground uppercase tracking-wide'>Translation</span>
-                    </div>
-                    <div className='flex-1 p-4 flex flex-col'>
-                      <Textarea
-                        placeholder='Enter the translated content here...'
-                        value={translationText}
-                        onChange={(e) => setTranslationText(e.target.value)}
-                        className='flex-1 resize-none text-sm leading-relaxed'
-                        disabled={selectedRequest.status === 'completed'}
-                      />
-                    </div>
-
-                    {/* Actions */}
-                    <div className='p-4 border-t bg-muted/20 flex items-center justify-between'>
-                      <div className='text-xs text-muted-foreground'>
-                        {translationText.length > 0 && (
-                          <span>{translationText.length} characters</span>
-                        )}
-                      </div>
-                      <div className='flex items-center gap-2'>
-                        {selectedRequest.status !== 'completed' && (
-                          <>
-                            <Button
-                              variant='outline'
-                              size='sm'
-                              onClick={handleSaveDraft}
-                              disabled={!translationText.trim()}
-                            >
-                              <Save className='h-4 w-4 mr-1.5' />
-                              Save Draft
-                            </Button>
-                            <Button
-                              size='sm'
-                              onClick={handleCompleteTranslation}
-                              disabled={!translationText.trim()}
-                            >
-                              <CheckCircle className='h-4 w-4 mr-1.5' />
-                              Complete & Send
-                            </Button>
-                          </>
-                        )}
-                        {selectedRequest.status === 'completed' && (
-                          <span className='text-sm text-emerald-500 flex items-center gap-1.5'>
-                            <CheckCircle className='h-4 w-4' />
-                            Translation sent to customer
+                          <span className={cn('flex items-center gap-1 text-xs', getTimeBadgeStyle(request.createdAt))}>
+                            <Clock className='h-3 w-3' />
+                            {getWaitTime(request.createdAt)}
                           </span>
                         )}
                       </div>
-                    </div>
-                  </div>
-                  </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )
+            })}
+          </div>
+        ) : (
+          <Card className='rounded-xl border-dashed border-2 border-border/40 shadow-none'>
+            <CardContent className='flex flex-col items-center justify-center py-20 gap-4'>
+              <div className='size-20 rounded-full bg-muted/50 flex items-center justify-center'>
+                <Languages className='h-10 w-10 text-muted-foreground/40' />
+              </div>
+              <div className='text-center space-y-1'>
+                <p className='text-base font-medium text-muted-foreground'>No translation tickets found</p>
+                <p className='text-sm text-muted-foreground/70'>Try adjusting your search or filters</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-                  {/* Vehicle Details Bar */}
-                  {selectedAuction && (
-                    <div className='border-t bg-muted/30 p-3 flex-shrink-0'>
-                      <div className='flex items-center gap-6 text-sm overflow-x-auto'>
-                        <div className='flex items-center gap-2'>
-                          <Calendar className='h-4 w-4 text-muted-foreground' />
-                          <span className='text-muted-foreground'>Year:</span>
-                          <span className='font-medium'>{selectedAuction.vehicleInfo.year}</span>
-                        </div>
-                        <div className='flex items-center gap-2'>
-                          <Gauge className='h-4 w-4 text-muted-foreground' />
-                          <span className='text-muted-foreground'>Mileage:</span>
-                          <span className='font-medium'>{selectedAuction.vehicleInfo.mileageDisplay}</span>
-                        </div>
-                        <div className='flex items-center gap-2'>
-                          <span className='text-muted-foreground'>Grade:</span>
-                          <Badge variant='secondary' className='text-xs'>
-                            {selectedAuction.vehicleInfo.grade || 'N/A'}
-                          </Badge>
-                        </div>
-                        <div className='flex items-center gap-2'>
-                          <Palette className='h-4 w-4 text-muted-foreground' />
-                          <span className='text-muted-foreground'>Color:</span>
-                          <span className='font-medium'>{selectedAuction.vehicleInfo.color}</span>
-                        </div>
-                        <div className='flex items-center gap-2'>
-                          <span className='text-muted-foreground'>Trans:</span>
-                          <span className='font-medium'>{selectedAuction.vehicleInfo.transmission}</span>
-                        </div>
-                        <div className='flex items-center gap-2'>
-                          <Hash className='h-4 w-4 text-muted-foreground' />
-                          <span className='text-muted-foreground'>Lot:</span>
-                          <span className='font-mono text-xs'>{selectedAuction.lotNumber}</span>
-                        </div>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className='flex items-center justify-between'>
+            <p className='text-sm text-muted-foreground'>
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredRequests.length)} of {filteredRequests.length}
+            </p>
+            <div className='flex items-center gap-2'>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className='h-4 w-4' />
+              </Button>
+              <span className='text-sm text-muted-foreground px-2'>
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                <ChevronRight className='h-4 w-4' />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Translation Modal - Polished */}
+        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+          <DialogContent className='!max-w-4xl w-[90vw] p-0 gap-0 overflow-hidden'>
+            <AnimatePresence mode='wait'>
+              {selectedRequest && selectedAuction && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className='flex flex-col max-h-[90vh]'
+                >
+                  {/* Header */}
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className='flex items-center justify-between px-6 py-5 border-b bg-muted/30'
+                  >
+                    <div className='flex items-center gap-4'>
+                      <div className='h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center'>
+                        <Languages className='h-6 w-6 text-primary' />
+                      </div>
+                      <div>
+                        <h2 className='text-lg font-semibold'>Translation Request</h2>
+                        <p className='text-sm text-muted-foreground'>
+                          {selectedAuction.vehicleInfo.year} {selectedAuction.vehicleInfo.make} {selectedAuction.vehicleInfo.model}
+                        </p>
                       </div>
                     </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className='flex-1 flex items-center justify-center text-muted-foreground'>
-                <div className='text-center'>
-                  <Languages className='h-12 w-12 mx-auto mb-4 opacity-50' />
-                  <p>Select a request to start translating</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+                    <Badge
+                      variant={selectedRequest.status === 'completed' ? 'emerald' : 'amber'}
+                      className='text-xs'
+                    >
+                      {selectedRequest.status === 'completed' ? 'Completed' : 'Pending'}
+                    </Badge>
+                  </motion.div>
 
-        {/* Fullscreen Image Dialog */}
-        <Dialog open={isFullscreen} onOpenChange={setIsFullscreen}>
-          <DialogContent className='max-w-[90vw] max-h-[90vh] p-0 overflow-hidden'>
-            {selectedRequest && vehicleImages.length > 0 && (
-              <div className='relative w-full h-[85vh] bg-black/95 flex items-center justify-center'>
-                <div className='absolute top-4 right-4 flex items-center gap-2 z-10'>
-                  <Button
-                    variant='secondary'
-                    size='icon'
-                    className='h-8 w-8'
-                    onClick={() => setImageZoom(Math.max(50, imageZoom - 25))}
+                  {/* Status Stepper */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.15 }}
+                    className='px-6 py-4 border-b flex justify-center'
                   >
-                    <ZoomOut className='h-4 w-4' />
-                  </Button>
-                  <span className='text-sm text-white bg-black/50 px-2 py-1 rounded'>{imageZoom}%</span>
-                  <Button
-                    variant='secondary'
-                    size='icon'
-                    className='h-8 w-8'
-                    onClick={() => setImageZoom(Math.min(300, imageZoom + 25))}
-                  >
-                    <ZoomIn className='h-4 w-4' />
-                  </Button>
-                  <Button
-                    variant='secondary'
-                    size='icon'
-                    className='h-8 w-8'
-                    onClick={() => setImageRotation((r) => (r + 90) % 360)}
-                  >
-                    <RotateCw className='h-4 w-4' />
-                  </Button>
-                </div>
-                {/* Navigation in fullscreen */}
-                {vehicleImages.length > 1 && (
-                  <>
-                    <Button
-                      variant='secondary'
-                      size='icon'
-                      className='absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full'
-                      onClick={handlePrevImage}
+                    <div className='flex items-center max-w-md w-full'>
+                      {statusSteps.map((step, index) => {
+                        const currentStep = getCurrentStep(selectedRequest.status)
+                        const isActive = index <= currentStep
+                        const isCurrent = index === currentStep
+                        const Icon = step.icon
+
+                        return (
+                          <div key={step.key} className='flex items-center flex-1'>
+                            <div className='flex flex-col items-center gap-2'>
+                              <div className={cn(
+                                'h-10 w-10 rounded-full flex items-center justify-center transition-all duration-300',
+                                isActive
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-muted text-muted-foreground',
+                                isCurrent && 'ring-4 ring-primary/20'
+                              )}>
+                                <Icon className='h-5 w-5' />
+                              </div>
+                              <span className={cn(
+                                'text-xs font-medium transition-colors',
+                                isActive ? 'text-foreground' : 'text-muted-foreground'
+                              )}>
+                                {step.label}
+                              </span>
+                            </div>
+                            {index < statusSteps.length - 1 && (
+                              <div className={cn(
+                                'flex-1 h-0.5 mx-3 transition-colors duration-300',
+                                index < currentStep ? 'bg-primary' : 'bg-muted'
+                              )} />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </motion.div>
+
+                  {/* Content */}
+                  <div className='flex-1 overflow-y-auto p-6 space-y-5'>
+                    {/* Auction Sheet Upload */}
+                    {selectedRequest.status !== 'completed' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.18 }}
+                      >
+                        <h3 className='text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3'>
+                          Auction Sheet
+                        </h3>
+                        {!uploadedFile ? (
+                          <div
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            className={cn(
+                              'relative rounded-xl border-2 border-dashed transition-all duration-200',
+                              isDragging
+                                ? 'border-primary bg-primary/5 scale-[1.01]'
+                                : 'border-border/60 bg-muted/20 hover:border-primary/40 hover:bg-muted/30'
+                            )}
+                          >
+                            <input
+                              type='file'
+                              accept='image/*,.pdf'
+                              onChange={handleFileInputChange}
+                              className='absolute inset-0 w-full h-full opacity-0 cursor-pointer'
+                            />
+                            <div className='flex flex-col items-center justify-center py-8 px-4'>
+                              <div className={cn(
+                                'h-12 w-12 rounded-xl flex items-center justify-center mb-3 transition-colors',
+                                isDragging ? 'bg-primary/20' : 'bg-muted'
+                              )}>
+                                <Upload className={cn(
+                                  'h-6 w-6 transition-colors',
+                                  isDragging ? 'text-primary' : 'text-muted-foreground'
+                                )} />
+                              </div>
+                              <p className='text-sm font-medium text-foreground'>
+                                {isDragging ? 'Drop file here' : 'Drag & drop auction sheet'}
+                              </p>
+                              <p className='text-xs text-muted-foreground mt-1'>
+                                or click to browse • PNG, JPG, PDF up to 10MB
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className='relative rounded-xl border bg-card overflow-hidden'>
+                            {/* Preview */}
+                            <div className='relative group'>
+                              {uploadedFile.type.startsWith('image/') ? (
+                                <div className='relative aspect-video bg-muted/30'>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={previewUrl || ''}
+                                    alt='Auction sheet preview'
+                                    className='w-full h-full object-contain'
+                                  />
+                                  <div className='absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center'>
+                                    <button
+                                      onClick={() => setIsPreviewOpen(true)}
+                                      className='opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 hover:bg-white text-black p-3 rounded-full shadow-lg'
+                                    >
+                                      <ZoomIn className='h-5 w-5' />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className='aspect-video bg-muted/30 flex items-center justify-center'>
+                                  <div className='text-center'>
+                                    <FileText className='h-12 w-12 text-muted-foreground mx-auto mb-2' />
+                                    <p className='text-sm text-muted-foreground'>PDF Document</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            {/* File Info Footer */}
+                            <div className='flex items-center justify-between p-3 border-t bg-muted/20'>
+                              <div className='flex items-center gap-2 min-w-0'>
+                                <ImageIcon className='h-4 w-4 text-muted-foreground shrink-0' />
+                                <span className='text-sm text-foreground truncate'>{uploadedFile.name}</span>
+                                <span className='text-xs text-muted-foreground shrink-0'>
+                                  ({(uploadedFile.size / 1024).toFixed(0)} KB)
+                                </span>
+                              </div>
+                              <button
+                                onClick={removeUploadedFile}
+                                className='text-muted-foreground hover:text-red-500 transition-colors p-1 rounded hover:bg-red-500/10'
+                              >
+                                <X className='h-4 w-4' />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+
+                    {/* Vehicle Details Card */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className='rounded-xl border bg-card p-5'
                     >
-                      <ChevronLeft className='h-6 w-6' />
-                    </Button>
-                    <Button
-                      variant='secondary'
-                      size='icon'
-                      className='absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full'
-                      onClick={handleNextImage}
+                      <h3 className='text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4'>
+                        Vehicle Details
+                      </h3>
+                      <div className='grid grid-cols-2 sm:grid-cols-3 gap-4'>
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-muted-foreground'>
+                            <Building2 className='h-4 w-4' />
+                            <span className='text-xs'>Lot Number</span>
+                          </div>
+                          <div className='flex items-center gap-2'>
+                            <span className='font-mono font-semibold'>{selectedAuction.lotNumber}</span>
+                            <button
+                              onClick={() => handleCopy(selectedAuction.lotNumber, 'lot')}
+                              className='text-muted-foreground hover:text-foreground transition-colors'
+                            >
+                              {copiedField === 'lot' ? (
+                                <Check className='h-3.5 w-3.5 text-emerald-500' />
+                              ) : (
+                                <Copy className='h-3.5 w-3.5' />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-muted-foreground'>
+                            <Building2 className='h-4 w-4' />
+                            <span className='text-xs'>Auction House</span>
+                          </div>
+                          <div className='flex items-center gap-2'>
+                            <span className='font-semibold'>{selectedAuction.auctionHouse}</span>
+                            <button
+                              onClick={() => handleCopy(selectedAuction.auctionHouse, 'house')}
+                              className='text-muted-foreground hover:text-foreground transition-colors'
+                            >
+                              {copiedField === 'house' ? (
+                                <Check className='h-3.5 w-3.5 text-emerald-500' />
+                              ) : (
+                                <Copy className='h-3.5 w-3.5' />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-muted-foreground'>
+                            <Calendar className='h-4 w-4' />
+                            <span className='text-xs'>Auction Date</span>
+                          </div>
+                          <span className='font-semibold'>{format(new Date(selectedAuction.startTime), 'MMM dd, yyyy')}</span>
+                        </div>
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-muted-foreground'>
+                            <Star className='h-4 w-4' />
+                            <span className='text-xs'>Grade</span>
+                          </div>
+                          <span className='font-semibold'>{selectedAuction.vehicleInfo.grade || 'N/A'}</span>
+                        </div>
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-muted-foreground'>
+                            <Car className='h-4 w-4' />
+                            <span className='text-xs'>Ext / Int Grade</span>
+                          </div>
+                          <span className='font-semibold'>
+                            {selectedAuction.vehicleInfo.exteriorGrade || 'N/A'} / {selectedAuction.vehicleInfo.interiorGrade || 'N/A'}
+                          </span>
+                        </div>
+                        <div className='space-y-1'>
+                          <div className='flex items-center gap-2 text-muted-foreground'>
+                            <User className='h-4 w-4' />
+                            <span className='text-xs'>Customer</span>
+                          </div>
+                          <span className='font-semibold'>{selectedRequest.customerName}</span>
+                        </div>
+                      </div>
+                    </motion.div>
+
+                    {/* Translation Section */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.25 }}
                     >
-                      <ChevronRight className='h-6 w-6' />
-                    </Button>
-                  </>
-                )}
-                <img
-                  src={vehicleImages[selectedImageIndex]}
-                  alt={`Vehicle ${selectedImageIndex + 1}`}
-                  className='max-w-full max-h-full object-contain transition-transform duration-200'
-                  style={{
-                    transform: `scale(${imageZoom / 100}) rotate(${imageRotation}deg)`,
-                  }}
-                />
-                {/* Image counter */}
-                <div className='absolute bottom-4 left-1/2 -translate-x-1/2 text-white bg-black/50 px-3 py-1 rounded-full text-sm'>
-                  {selectedImageIndex + 1} / {vehicleImages.length}
-                </div>
-              </div>
-            )}
+                      {selectedRequest.status === 'completed' ? (
+                        <div className='rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-5'>
+                          <div className='flex items-center gap-3'>
+                            <div className='h-10 w-10 rounded-full bg-emerald-500/20 flex items-center justify-center'>
+                              <CheckCircle className='h-5 w-5 text-emerald-600' />
+                            </div>
+                            <div>
+                              <span className='font-semibold text-emerald-700 dark:text-emerald-400'>Translation Completed</span>
+                              <p className='text-sm text-muted-foreground'>
+                                This translation has been sent to the customer.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className='space-y-3'>
+                          <div className='flex items-center justify-between'>
+                            <h3 className='text-xs font-semibold uppercase tracking-wider text-muted-foreground'>
+                              Translation
+                            </h3>
+                            <span className='text-xs text-muted-foreground flex items-center gap-1'>
+                              <Clock className='h-3 w-3' />
+                              Waiting {getWaitTime(selectedRequest.createdAt)}
+                            </span>
+                          </div>
+                          <div className='relative'>
+                            <Textarea
+                              placeholder='Enter your translation here...'
+                              value={replyText}
+                              onChange={(e) => setReplyText(e.target.value.slice(0, MAX_CHARACTERS))}
+                              className='min-h-[180px] resize-none rounded-xl bg-muted/30 border-border/50 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all'
+                              autoFocus
+                            />
+                          </div>
+                          <div className='flex items-center justify-between text-xs text-muted-foreground'>
+                            <span className='flex items-center gap-1.5'>
+                              <kbd className='px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]'>⌘</kbd>
+                              <span>+</span>
+                              <kbd className='px-1.5 py-0.5 rounded bg-muted font-mono text-[10px]'>Enter</kbd>
+                              <span>to send</span>
+                            </span>
+                            <span className={cn(
+                              replyText.length >= MAX_CHARACTERS * 0.8 && replyText.length < MAX_CHARACTERS && 'text-amber-500',
+                              replyText.length >= MAX_CHARACTERS && 'text-red-500'
+                            )}>
+                              {replyText.length.toLocaleString()} / {MAX_CHARACTERS.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  </div>
+
+                  {/* Sticky Footer */}
+                  {selectedRequest.status !== 'completed' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                      className='px-6 py-4 border-t bg-muted/30'
+                    >
+                      <div className='flex items-center justify-end gap-3'>
+                        <Button
+                          variant='outline'
+                          onClick={() => setIsModalOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleSendTranslation}
+                          disabled={!replyText.trim() || isSending}
+                          className='min-w-[140px]'
+                        >
+                          {isSending ? (
+                            <>
+                              <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Send className='h-4 w-4 mr-2' />
+                              Send Translation
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </DialogContent>
         </Dialog>
 
-        {/* Assign Translator Drawer */}
-        <AssignTranslatorDrawer
-          open={assignDrawerOpen}
-          onOpenChange={setAssignDrawerOpen}
-          request={selectedRequest}
-          onAssign={handleAssignStaff}
-        />
+        {/* Fullscreen Image Preview Modal */}
+        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <DialogContent className='max-w-[95vw] max-h-[95vh] p-0 gap-0 overflow-hidden bg-black/95 border-none'>
+            <div className='relative w-full h-full flex items-center justify-center p-4'>
+              <button
+                onClick={() => setIsPreviewOpen(false)}
+                className='absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors z-10'
+              >
+                <X className='h-5 w-5' />
+              </button>
+              {previewUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewUrl}
+                  alt='Auction sheet full preview'
+                  className='max-w-full max-h-[90vh] object-contain rounded-lg'
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </Main>
     </>
   )

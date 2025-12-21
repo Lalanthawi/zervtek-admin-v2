@@ -249,7 +249,7 @@ export function StockVehicles() {
             </TabsTrigger>
             <TabsTrigger value='vendor' className='gap-2'>
               <Building2 className='h-4 w-4' />
-              Vendor Stock
+              Zervtek Stock
             </TabsTrigger>
           </TabsList>
 
@@ -726,14 +726,14 @@ export function StockVehicles() {
           </TabsContent>
 
           <TabsContent value='vendor' className='mt-4 space-y-4'>
-            {/* Vendor Stock Stats */}
+            {/* Zervtek Stock Stats */}
             <div className='flex items-center justify-between'>
               <p className='text-sm text-muted-foreground'>
                 {vendorVehicles.length} vehicles from {vendorPartners.length} vendor partners
               </p>
               <Button onClick={() => setAddDrawerOpen(true)}>
                 <Plus className='mr-2 h-4 w-4' />
-                Add Vendor Vehicle
+                Add Zervtek Vehicle
               </Button>
             </div>
 

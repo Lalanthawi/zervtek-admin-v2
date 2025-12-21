@@ -514,7 +514,7 @@ export function AddVehicleDrawer({
                       </svg>
                     </div>
                     <span className={`text-sm font-medium ${source === 'vendor' ? 'text-primary' : ''}`}>
-                      Vendor Stock
+                      Zervtek Stock
                     </span>
                     <span className='text-xs text-muted-foreground'>From partners</span>
                   </button>

@@ -29,7 +29,7 @@ export function WonAuctionsDialogs({
   onMarkDelivered,
   onMarkCompleted,
 }: WonAuctionsDialogsProps) {
-  const { open, setOpen, currentRow, initialMode } = useWonAuctions()
+  const { open, setOpen, currentRow } = useWonAuctions()
 
   return (
     <>
@@ -38,7 +38,6 @@ export function WonAuctionsDialogs({
         open={open === 'purchase'}
         onClose={() => setOpen(null)}
         auction={currentRow}
-        initialMode={initialMode}
         onWorkflowUpdate={onWorkflowUpdate || (() => {})}
         onDocumentUpload={onUploadDocuments}
         onDocumentDelete={onDeleteDocument}

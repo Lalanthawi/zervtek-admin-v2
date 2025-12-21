@@ -39,7 +39,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AuctionCard } from './components/auction-card'
 import { AssistBuyerDrawer } from './components/assist-buyer-drawer'
 import { auctions, type Auction } from './data/auctions'
@@ -59,7 +58,19 @@ import {
   Camera,
   Copy,
   Check,
+  Link,
+  ZoomIn,
+  Maximize2,
+  CalendarDays,
+  Landmark,
+  Tag,
+  GaugeCircle,
+  Wrench,
+  Zap,
+  Clock,
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -117,7 +128,6 @@ const equipmentItems = [
 export function Auctions() {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('newest')
   const [selectedAuction, setSelectedAuction] = useState<Auction | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
@@ -156,6 +166,8 @@ export function Auctions() {
   // Detail modal states
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [copiedLot, setCopiedLot] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
+  const [isImageDialogOpen, setIsImageDialogOpen] = useState(false)
 
   // Get unique makes and models from data
   const uniqueMakes = useMemo(() => {
@@ -299,8 +311,6 @@ export function Auctions() {
         )
       }
 
-      const matchesStatus = statusFilter === 'all' || auction.status === statusFilter
-
       // Basic filters
       const matchesMake = !make || auction.vehicleInfo.make === make
       const matchesModel = !model || auction.vehicleInfo.model === model
@@ -352,7 +362,7 @@ export function Auctions() {
         auction.vehicleInfo.grade?.toLowerCase().includes('lhd') ||
         auction.vehicleInfo.grade?.toLowerCase().includes('left')
 
-      return matchesSearch && matchesStatus && matchesMake && matchesModel &&
+      return matchesSearch && matchesMake && matchesModel &&
         matchesColor && matchesScore && matchesTransmission && matchesSpecial &&
         matchesYearFrom && matchesYearTo && matchesPriceFrom && matchesPriceTo &&
         matchesMileageFrom && matchesMileageTo && matchesAuctionDateFrom && matchesAuctionDateTo &&
@@ -379,7 +389,7 @@ export function Auctions() {
     }
 
     return filtered
-  }, [searchTerm, statusFilter, sortBy, make, model, selectedColors, selectedScores,
+  }, [searchTerm, sortBy, make, model, selectedColors, selectedScores,
       selectedTransmission, selectedSpecialVehicles, selectedEquipment, yearFrom, yearTo,
       priceFrom, priceTo, mileageFrom, mileageTo, auctionDateFrom, auctionDateTo,
       lotNumber, isLHD])
@@ -523,24 +533,8 @@ export function Auctions() {
           </Button>
         </div>
 
-        {/* Filters - Row 2: Status tabs and sort */}
+        {/* Filters - Row 2: Sort */}
         <div className='flex flex-wrap items-center gap-4'>
-          <Tabs
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value)
-              setCurrentPage(1)
-            }}
-          >
-            <TabsList>
-              <TabsTrigger value='all'>All</TabsTrigger>
-              <TabsTrigger value='active'>Active</TabsTrigger>
-              <TabsTrigger value='scheduled'>Scheduled</TabsTrigger>
-              <TabsTrigger value='ended'>Ended</TabsTrigger>
-              <TabsTrigger value='sold'>Sold</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
           <div className='ml-auto flex items-center gap-2'>
             {(make || model || activeFilterCount > 0) && (
               <Button
@@ -628,224 +622,377 @@ export function Auctions() {
         )}
       </Main>
 
-      {/* View Details Dialog - Refined */}
-      <Dialog open={viewDialogOpen} onOpenChange={(open) => {
-        setViewDialogOpen(open)
-        if (!open) {
-          setSelectedImageIndex(0)
-          setCopiedLot(false)
-        }
-      }}>
-        <DialogContent className='sm:max-w-2xl w-[90vw] max-h-[90vh] !flex !flex-col !gap-0 p-0 overflow-hidden shadow-2xl'>
-          {selectedAuction && (
-            <div className='flex flex-col max-h-[90vh]'>
-              {/* Header */}
-              <div className='flex items-start justify-between p-6 pb-4'>
-                <div className='space-y-1.5 pr-8'>
-                  <div className='flex items-center gap-2.5'>
-                    <h2 className='text-xl font-semibold text-foreground'>
-                      {selectedAuction.vehicleInfo.year} {selectedAuction.vehicleInfo.make} {selectedAuction.vehicleInfo.model}
-                    </h2>
-                    <Badge
-                      className={cn(
-                        'text-xs px-2 py-0.5 rounded-md font-medium',
-                        selectedAuction.status === 'draft' && 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-                        selectedAuction.status === 'active' && 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-                        selectedAuction.status === 'scheduled' && 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-                        selectedAuction.status === 'ended' && 'bg-slate-500/10 text-slate-500 border-slate-500/20',
-                        selectedAuction.status === 'sold' && 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-                        selectedAuction.status === 'cancelled' && 'bg-red-500/10 text-red-500 border-red-500/20'
+      {/* View Details Modal - Matching Bids Modal Design */}
+      <AnimatePresence>
+        {viewDialogOpen && selectedAuction && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className='fixed inset-0 z-50 bg-black/60 backdrop-blur-sm'
+              onClick={() => {
+                setViewDialogOpen(false)
+                setSelectedImageIndex(0)
+                setCopiedLot(false)
+                setCopiedLink(false)
+                setIsImageDialogOpen(false)
+              }}
+            />
+
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className={cn(
+                'fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2',
+                'max-h-[90vh] overflow-hidden rounded-2xl',
+                'bg-background shadow-2xl',
+                'focus:outline-none',
+                'flex flex-col'
+              )}
+            >
+              {/* Image Gallery */}
+              <div className='relative bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900'>
+                <div
+                  className='relative h-72 md:h-80 cursor-pointer group'
+                  onClick={() => setIsImageDialogOpen(true)}
+                >
+                  {selectedAuction.vehicleInfo.images.length > 0 ? (
+                    <>
+                      <AnimatePresence mode='wait'>
+                        <motion.img
+                          key={selectedImageIndex}
+                          src={selectedAuction.vehicleInfo.images[selectedImageIndex]}
+                          alt={`${selectedAuction.vehicleInfo.year} ${selectedAuction.vehicleInfo.make} ${selectedAuction.vehicleInfo.model}`}
+                          className='h-full w-full object-cover'
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                        />
+                      </AnimatePresence>
+
+                      {/* Zoom hint overlay */}
+                      <div className='absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center'>
+                        <div className='opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-full p-3 backdrop-blur-sm'>
+                          <ZoomIn className='h-6 w-6 text-white' />
+                        </div>
+                      </div>
+
+                      {/* Navigation arrows */}
+                      {selectedAuction.vehicleInfo.images.length > 1 && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedImageIndex((prev) =>
+                                prev === 0 ? selectedAuction.vehicleInfo.images.length - 1 : prev - 1
+                              )
+                            }}
+                            className='absolute left-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-black/60 hover:scale-110 opacity-0 group-hover:opacity-100'
+                          >
+                            <ChevronLeft className='h-6 w-6' />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedImageIndex((prev) =>
+                                prev === selectedAuction.vehicleInfo.images.length - 1 ? 0 : prev + 1
+                              )
+                            }}
+                            className='absolute right-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-all hover:bg-black/60 hover:scale-110 opacity-0 group-hover:opacity-100'
+                          >
+                            <ChevronRight className='h-6 w-6' />
+                          </button>
+                        </>
                       )}
-                    >
-                      {selectedAuction.status.charAt(0).toUpperCase() + selectedAuction.status.slice(1)}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
 
-              {/* Scrollable Content */}
-              <div className='flex-1 overflow-y-auto px-6 pb-6 space-y-6'>
-                {/* Image Gallery */}
-                <div className='space-y-3'>
-                  {/* Main Image */}
-                  <div className='relative overflow-hidden rounded-xl bg-muted/20 border border-border/50'>
-                    {selectedAuction.vehicleInfo.images.length > 0 ? (
-                      <img
-                        src={selectedAuction.vehicleInfo.images[selectedImageIndex]}
-                        alt={`${selectedAuction.vehicleInfo.make} ${selectedAuction.vehicleInfo.model}`}
-                        className='w-full h-72 object-cover'
-                      />
-                    ) : (
-                      <div className='flex flex-col items-center justify-center h-72 text-muted-foreground'>
-                        <Camera className='w-12 h-12 mb-2 opacity-50' />
-                        <span className='text-sm'>No images available</span>
-                      </div>
-                    )}
-                    {/* Score badge overlay */}
-                    {selectedAuction.vehicleInfo.score && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className='absolute top-3 right-3 bg-background/90 backdrop-blur-sm rounded-lg px-2.5 py-1.5 border border-border/50'>
-                            <span className='text-sm font-bold tabular-nums'>
-                              Grade: {selectedAuction.vehicleInfo.score}
-                            </span>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side='left'>
-                          <p className='text-xs'>Japanese auction grade (S is best)</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    {/* Image counter */}
-                    {selectedAuction.vehicleInfo.images.length > 1 && (
-                      <div className='absolute bottom-3 right-3 bg-background/90 backdrop-blur-sm rounded-md px-2 py-1 text-xs font-medium tabular-nums'>
-                        {selectedImageIndex + 1} / {selectedAuction.vehicleInfo.images.length}
-                      </div>
-                    )}
-                  </div>
+                      {/* Dots indicator */}
+                      {selectedAuction.vehicleInfo.images.length > 1 && (
+                        <div className='absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-2 backdrop-blur-sm'>
+                          {selectedAuction.vehicleInfo.images.map((_, idx) => (
+                            <button
+                              key={idx}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedImageIndex(idx)
+                              }}
+                              className={cn(
+                                'rounded-full transition-all',
+                                selectedImageIndex === idx
+                                  ? 'w-2.5 h-2.5 bg-white'
+                                  : 'w-2 h-2 bg-white/50 hover:bg-white/75'
+                              )}
+                            />
+                          ))}
+                        </div>
+                      )}
 
-                  {/* Thumbnails */}
-                  {selectedAuction.vehicleInfo.images.length > 1 && (
-                    <div className='flex gap-2 overflow-x-auto pb-1'>
-                      {selectedAuction.vehicleInfo.images.map((img, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setSelectedImageIndex(idx)}
-                          className={cn(
-                            'relative flex-shrink-0 w-20 h-14 rounded-lg overflow-hidden transition-all duration-150 cursor-pointer',
-                            idx === selectedImageIndex
-                              ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                              : 'opacity-60 hover:opacity-100 hover:scale-105'
-                          )}
-                        >
-                          <img
-                            src={img}
-                            alt={`Thumbnail ${idx + 1}`}
-                            className='w-full h-full object-cover'
-                          />
-                        </button>
-                      ))}
+                      {/* Fullscreen hint */}
+                      <div className='absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <div className='flex items-center gap-1.5 rounded-full bg-black/50 px-2.5 py-1.5 text-xs text-white backdrop-blur-sm'>
+                          <Maximize2 className='h-3.5 w-3.5' />
+                          <span>Click to expand</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className='flex h-full w-full items-center justify-center'>
+                      <Car className='h-20 w-20 text-muted-foreground/30' />
                     </div>
                   )}
                 </div>
 
-                {/* Price & Key Info */}
-                <div className='bg-gradient-to-br from-muted/40 to-muted/20 rounded-xl p-5 space-y-4 border border-border/30'>
-                  {/* Price Row with Assist Buyer */}
-                  <div className='flex items-center justify-between gap-4'>
+                {/* Thumbnails */}
+                {selectedAuction.vehicleInfo.images.length > 1 && (
+                  <div className='flex gap-2 overflow-x-auto p-2.5 bg-black/10 dark:bg-white/5'>
+                    {selectedAuction.vehicleInfo.images.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSelectedImageIndex(idx)}
+                        className={cn(
+                          'flex-shrink-0 h-14 w-20 rounded-md overflow-hidden transition-all',
+                          selectedImageIndex === idx
+                            ? 'ring-2 ring-primary ring-offset-1 ring-offset-background'
+                            : 'opacity-50 hover:opacity-100'
+                        )}
+                      >
+                        <img src={img} alt={`Thumbnail ${idx + 1}`} className='h-full w-full object-cover' />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Close button */}
+                <button
+                  onClick={() => {
+                    setViewDialogOpen(false)
+                    setSelectedImageIndex(0)
+                    setCopiedLot(false)
+                    setCopiedLink(false)
+                  }}
+                  className='absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-lg bg-black/20 text-white backdrop-blur-sm transition-colors hover:bg-black/40'
+                >
+                  <X className='h-5 w-5' />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className='flex-1 overflow-y-auto'>
+                {/* Price Section */}
+                <div className='px-5 py-4'>
+                  <div className='flex items-center justify-between'>
                     <div>
-                      <p className='text-xs text-muted-foreground/60 uppercase tracking-wide mb-1'>Starting Price</p>
-                      <p className='text-3xl font-bold text-foreground tabular-nums'>
+                      <p className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>Starting Price</p>
+                      <p className='text-3xl font-bold tracking-tight mt-0.5'>
                         ¥{selectedAuction.startingBid.toLocaleString()}
                       </p>
                     </div>
-                    {selectedAuction.status === 'active' && (
-                      <Button
-                        size='lg'
-                        onClick={() => setIsAssistBuyerOpen(true)}
-                        className='bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200 hover:scale-[1.02]'
-                      >
-                        <Hand className='mr-2 h-4 w-4' />
-                        Assist Buyer
-                      </Button>
-                    )}
+                    <Badge className={cn(
+                      'text-sm px-3 py-1.5 font-medium border-0',
+                      selectedAuction.status === 'draft' && 'bg-amber-500/15 text-amber-600',
+                      selectedAuction.status === 'active' && 'bg-emerald-500/15 text-emerald-600',
+                      selectedAuction.status === 'scheduled' && 'bg-blue-500/15 text-blue-600',
+                      selectedAuction.status === 'ended' && 'bg-slate-500/15 text-slate-600',
+                      selectedAuction.status === 'sold' && 'bg-purple-500/15 text-purple-600',
+                      selectedAuction.status === 'cancelled' && 'bg-red-500/15 text-red-600'
+                    )}>
+                      {selectedAuction.status.charAt(0).toUpperCase() + selectedAuction.status.slice(1)}
+                    </Badge>
                   </div>
+                </div>
 
-                  {/* Info Grid */}
-                  <div className='grid grid-cols-3 gap-3 pt-3 border-t border-border/30'>
-                    <div className='space-y-0.5'>
-                      <p className='text-xs text-muted-foreground/60'>Auction House</p>
-                      <p className='text-sm font-medium'>{selectedAuction.auctionHouse}</p>
+                {/* Content */}
+                <div className='px-5 pb-5 space-y-4'>
+                  {/* Vehicle Title Card */}
+                  <div className='flex items-center gap-4 rounded-xl bg-muted/30 p-4'>
+                    <div className='h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center'>
+                      <Car className='h-6 w-6 text-primary' />
                     </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedAuction.lotNumber)
-                        setCopiedLot(true)
-                        setTimeout(() => setCopiedLot(false), 2000)
-                        toast.success('Lot number copied')
-                      }}
-                      className='space-y-0.5 text-center hover:bg-background/30 rounded-lg py-1 -my-1 transition-colors group'
-                    >
-                      <p className='text-xs text-muted-foreground/60 flex items-center justify-center gap-1'>
-                        Lot No.
-                        {copiedLot ? (
-                          <Check className='w-3 h-3 text-emerald-500' />
-                        ) : (
-                          <Copy className='w-3 h-3 opacity-0 group-hover:opacity-70 transition-opacity' />
+                    <div className='flex-1 min-w-0'>
+                      <div className='flex items-center gap-2'>
+                        <p className='font-semibold truncate'>
+                          {selectedAuction.vehicleInfo.year} {selectedAuction.vehicleInfo.make} {selectedAuction.vehicleInfo.model}
+                        </p>
+                        {selectedAuction.vehicleInfo.score && (
+                          <Badge className={cn(
+                            'text-xs border-0',
+                            ['S', '6', '5', '4.5'].includes(selectedAuction.vehicleInfo.score)
+                              ? 'bg-emerald-500/15 text-emerald-600'
+                              : ['4', '3.5', '3'].includes(selectedAuction.vehicleInfo.score)
+                                ? 'bg-blue-500/15 text-blue-600'
+                                : 'bg-amber-500/15 text-amber-600'
+                          )}>
+                            Grade {selectedAuction.vehicleInfo.score}
+                          </Badge>
                         )}
+                      </div>
+                      <p className='text-sm text-muted-foreground'>
+                        {selectedAuction.vehicleInfo.mileageDisplay} • {selectedAuction.vehicleInfo.transmission} • {selectedAuction.vehicleInfo.color}
                       </p>
-                      <p className='text-sm font-medium'>{selectedAuction.lotNumber}</p>
-                    </button>
-                    <div className='space-y-0.5 text-right'>
-                      <p className='text-xs text-muted-foreground/60'>Auction Date</p>
-                      <p className='text-sm font-medium tabular-nums'>{format(new Date(selectedAuction.startTime), 'MMM d, yyyy')}</p>
+                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => {
+                            const url = `https://customer-portal-v3.vercel.app/dashboard/auction/${selectedAuction.id}`
+                            navigator.clipboard.writeText(url)
+                            setCopiedLink(true)
+                            setTimeout(() => setCopiedLink(false), 2000)
+                            toast.success('Link copied to clipboard')
+                          }}
+                          className='p-2 rounded-lg hover:bg-muted transition-colors'
+                        >
+                          {copiedLink ? (
+                            <Check className='w-4 h-4 text-emerald-500' />
+                          ) : (
+                            <Link className='w-4 h-4 text-muted-foreground' />
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side='bottom'>
+                        <p className='text-xs'>{copiedLink ? 'Copied!' : 'Copy link'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+
+                  {/* Info Sections - Two Column Grid */}
+                  <div className='grid gap-4 grid-cols-2'>
+                    {/* Auction Details */}
+                    <div className='rounded-xl bg-muted/30 p-4'>
+                      <h3 className='text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3'>
+                        Auction Details
+                      </h3>
+                      <div className='space-y-0.5'>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <Landmark className='h-3.5 w-3.5' />
+                            House
+                          </span>
+                          <span className='text-sm font-medium'>{selectedAuction.auctionHouse}</span>
+                        </div>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <Tag className='h-3.5 w-3.5' />
+                            Lot No.
+                          </span>
+                          <div className='flex items-center gap-1.5'>
+                            <span className='text-sm font-medium font-mono'>{selectedAuction.lotNumber}</span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(selectedAuction.lotNumber)
+                                setCopiedLot(true)
+                                setTimeout(() => setCopiedLot(false), 2000)
+                                toast.success('Copied to clipboard')
+                              }}
+                              className='p-1 rounded hover:bg-muted transition-colors'
+                            >
+                              {copiedLot ? (
+                                <Check className='h-3 w-3 text-emerald-500' />
+                              ) : (
+                                <Copy className='h-3 w-3 text-muted-foreground' />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <CalendarDays className='h-3.5 w-3.5' />
+                            Date
+                          </span>
+                          <span className='text-sm font-medium'>{format(new Date(selectedAuction.startTime), 'MMM d, yyyy')}</span>
+                        </div>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <Clock className='h-3.5 w-3.5' />
+                            End Time
+                          </span>
+                          <span className='text-sm font-medium'>{format(new Date(selectedAuction.endTime), 'HH:mm')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Vehicle Specs */}
+                    <div className='rounded-xl bg-muted/30 p-4'>
+                      <h3 className='text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3'>
+                        Vehicle Specs
+                      </h3>
+                      <div className='space-y-0.5'>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <GaugeCircle className='h-3.5 w-3.5' />
+                            Mileage
+                          </span>
+                          <span className={cn(
+                            'text-sm font-medium',
+                            selectedAuction.vehicleInfo.mileage > 0 && selectedAuction.vehicleInfo.mileage < 50000 && 'text-emerald-600'
+                          )}>
+                            {selectedAuction.vehicleInfo.mileageDisplay}
+                          </span>
+                        </div>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <Wrench className='h-3.5 w-3.5' />
+                            Trans
+                          </span>
+                          <span className='text-sm font-medium'>{selectedAuction.vehicleInfo.transmission}</span>
+                        </div>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <Zap className='h-3.5 w-3.5' />
+                            Engine
+                          </span>
+                          <span className='text-sm font-medium'>{selectedAuction.vehicleInfo.displacement || '—'}</span>
+                        </div>
+                        <div className='flex justify-between items-center py-2.5'>
+                          <span className='text-sm text-muted-foreground flex items-center gap-1.5'>
+                            <span className='w-3.5 h-3.5 rounded-full border border-muted-foreground/30' style={{ backgroundColor: selectedAuction.vehicleInfo.color?.toLowerCase().includes('white') ? '#fff' : selectedAuction.vehicleInfo.color?.toLowerCase().includes('black') ? '#1a1a1a' : selectedAuction.vehicleInfo.color?.toLowerCase().includes('silver') ? '#C0C0C0' : selectedAuction.vehicleInfo.color?.toLowerCase().includes('red') ? '#DC2626' : selectedAuction.vehicleInfo.color?.toLowerCase().includes('blue') ? '#2563EB' : '#6B7280' }} />
+                            Color
+                          </span>
+                          <span className='text-sm font-medium'>{selectedAuction.vehicleInfo.color}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Vehicle Information */}
-                <div className='bg-muted/20 rounded-xl p-4 space-y-3'>
-                  <h3 className='text-xs font-medium text-muted-foreground/70 uppercase tracking-wide'>
-                    Vehicle Information
-                  </h3>
-                  <div className='space-y-2'>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Year</span>
-                      <span className='font-medium tabular-nums'>{selectedAuction.vehicleInfo.year}</span>
-                    </div>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Grade</span>
-                      {selectedAuction.vehicleInfo.score ? (
-                        <Badge className={cn(
-                          'text-xs px-2 py-0.5 font-semibold',
-                          ['S', '6', '5', '4.5'].includes(selectedAuction.vehicleInfo.score)
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : ['4', '3.5', '3'].includes(selectedAuction.vehicleInfo.score)
-                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        )}>
-                          {selectedAuction.vehicleInfo.score}
-                        </Badge>
-                      ) : (
-                        <span className='font-medium text-muted-foreground'>—</span>
-                      )}
-                    </div>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Engine</span>
-                      <span className='font-medium'>{selectedAuction.vehicleInfo.displacement || '—'}</span>
-                    </div>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Trans</span>
-                      <span className='font-medium'>{selectedAuction.vehicleInfo.transmission}</span>
-                    </div>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Model</span>
-                      <span className='font-medium'>{selectedAuction.vehicleInfo.model}</span>
-                    </div>
-                    <div className='flex items-center justify-between text-sm'>
-                      <span className='text-muted-foreground'>Mileage</span>
-                      <span className={cn(
-                        'font-medium',
-                        selectedAuction.vehicleInfo.mileage > 0 && selectedAuction.vehicleInfo.mileage < 10 && 'text-emerald-400'
-                      )}>
-                        {selectedAuction.vehicleInfo.mileage === 0
-                          ? '0 km'
-                          : selectedAuction.vehicleInfo.mileage > 0 && selectedAuction.vehicleInfo.mileage < 10
-                            ? `${(selectedAuction.vehicleInfo.mileage * 1000).toLocaleString()} km`
-                            : selectedAuction.vehicleInfo.mileageDisplay}
-                        {selectedAuction.vehicleInfo.mileage > 0 && selectedAuction.vehicleInfo.mileage < 10 && (
-                          <span className='ml-1.5 text-xs text-emerald-400/70'>Low</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
               </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+
+              {/* Sticky Footer */}
+              <div className='flex items-center justify-between border-t px-5 py-4 bg-background'>
+                <div className='flex items-center gap-2'>
+                  {selectedAuction.status === 'active' && (
+                    <Button
+                      size='default'
+                      className='h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white'
+                      onClick={() => setIsAssistBuyerOpen(true)}
+                    >
+                      <Hand className='mr-2 h-4 w-4' />
+                      Assist Buyer
+                    </Button>
+                  )}
+                </div>
+                <Button
+                  variant='ghost'
+                  className='h-10 rounded-lg text-muted-foreground'
+                  onClick={() => {
+                    setViewDialogOpen(false)
+                    setSelectedImageIndex(0)
+                    setCopiedLot(false)
+                    setCopiedLink(false)
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Assist Buyer Drawer */}
       <AssistBuyerDrawer
@@ -1275,6 +1422,49 @@ export function Auctions() {
               </div>
             </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full-Screen Image Dialog */}
+      <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
+        <DialogContent className='max-w-4xl w-[95vw] h-[90vh] p-0 bg-black/95 border-none'>
+          {selectedAuction && selectedAuction.vehicleInfo.images.length > 0 && (
+            <div className='relative w-full h-full flex items-center justify-center'>
+              {/* Main Image */}
+              <img
+                src={selectedAuction.vehicleInfo.images[selectedImageIndex]}
+                alt={`${selectedAuction.vehicleInfo.make} ${selectedAuction.vehicleInfo.model}`}
+                className='max-w-full max-h-full object-contain'
+              />
+
+              {/* Navigation Arrows */}
+              {selectedAuction.vehicleInfo.images.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setSelectedImageIndex((prev) =>
+                      prev === 0 ? selectedAuction.vehicleInfo.images.length - 1 : prev - 1
+                    )}
+                    className='absolute left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white'
+                  >
+                    <ChevronLeft className='w-6 h-6' />
+                  </button>
+                  <button
+                    onClick={() => setSelectedImageIndex((prev) =>
+                      prev === selectedAuction.vehicleInfo.images.length - 1 ? 0 : prev + 1
+                    )}
+                    className='absolute right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white'
+                  >
+                    <ChevronRight className='w-6 h-6' />
+                  </button>
+                </>
+              )}
+
+              {/* Image Counter */}
+              <div className='absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1.5 rounded-full text-sm font-medium tabular-nums'>
+                {selectedImageIndex + 1} / {selectedAuction.vehicleInfo.images.length}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
