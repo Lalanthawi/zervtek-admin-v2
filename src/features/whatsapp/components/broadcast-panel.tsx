@@ -126,91 +126,82 @@ export function BroadcastPanel() {
   }
 
   return (
-    <div className='space-y-6'>
-      {/* Header */}
-      <div className='flex flex-wrap items-center justify-between gap-4'>
-        <div>
-          <h3 className='text-lg font-semibold'>Broadcast Messages</h3>
-          <p className='text-sm text-muted-foreground'>
-            Send bulk messages to your contact lists
-          </p>
-        </div>
-        <Button onClick={() => setDialogOpen(true)}>
+    <div className='flex h-full flex-col'>
+      {/* Header - WhatsApp style */}
+      <div className='flex h-14 flex-shrink-0 items-center justify-between border-b border-[var(--wa-border)] bg-[#F0F2F5] px-4 dark:bg-[#202C33]'>
+        <h2 className='text-lg font-medium text-[#111B21] dark:text-[#E9EDEF]'>
+          Broadcast Messages
+        </h2>
+        <Button
+          onClick={() => setDialogOpen(true)}
+          className='bg-[#00A884] text-white hover:bg-[#00A884]/90'
+        >
           <Radio className='mr-2 h-4 w-4' />
           New Broadcast
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className='grid gap-4 sm:grid-cols-4'>
-        <Card>
-          <CardContent className='pt-6'>
-            <div className='flex items-center gap-4'>
-              <div className='rounded-full bg-blue-100 p-3 dark:bg-blue-950'>
-                <Radio className='h-5 w-5 text-blue-600' />
-              </div>
-              <div>
-                <p className='text-2xl font-bold'>{broadcasts?.length || 0}</p>
-                <p className='text-xs text-muted-foreground'>Total Broadcasts</p>
-              </div>
+      {/* Content */}
+      <div className='flex-1 overflow-auto bg-white dark:bg-[#111B21]'>
+        {/* Stats */}
+        <div className='grid gap-3 border-b border-[var(--wa-border)] bg-[#F0F2F5] p-4 dark:bg-[#202C33] sm:grid-cols-4'>
+          <div className='flex items-center gap-3 rounded-lg bg-white p-3 dark:bg-[#111B21]'>
+            <div className='rounded-full bg-[#00A884]/10 p-2.5'>
+              <Radio className='h-5 w-5 text-[#00A884]' />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className='pt-6'>
-            <div className='flex items-center gap-4'>
-              <div className='rounded-full bg-green-100 p-3 dark:bg-green-950'>
-                <CheckCircle className='h-5 w-5 text-green-600' />
-              </div>
-              <div>
-                <p className='text-2xl font-bold'>
-                  {broadcasts?.filter((b) => b.status === 'completed').length || 0}
-                </p>
-                <p className='text-xs text-muted-foreground'>Completed</p>
-              </div>
+            <div>
+              <p className='text-xl font-semibold text-[#111B21] dark:text-[#E9EDEF]'>
+                {broadcasts?.length || 0}
+              </p>
+              <p className='text-xs text-[#667781] dark:text-[#8696A0]'>Total Broadcasts</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className='pt-6'>
-            <div className='flex items-center gap-4'>
-              <div className='rounded-full bg-yellow-100 p-3 dark:bg-yellow-950'>
-                <Clock className='h-5 w-5 text-yellow-600' />
-              </div>
-              <div>
-                <p className='text-2xl font-bold'>
-                  {broadcasts?.filter((b) => b.status === 'scheduled').length || 0}
-                </p>
-                <p className='text-xs text-muted-foreground'>Scheduled</p>
-              </div>
+          </div>
+          <div className='flex items-center gap-3 rounded-lg bg-white p-3 dark:bg-[#111B21]'>
+            <div className='rounded-full bg-green-500/10 p-2.5'>
+              <CheckCircle className='h-5 w-5 text-green-500' />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className='pt-6'>
-            <div className='flex items-center gap-4'>
-              <div className='rounded-full bg-purple-100 p-3 dark:bg-purple-950'>
-                <Users className='h-5 w-5 text-purple-600' />
-              </div>
-              <div>
-                <p className='text-2xl font-bold'>{broadcastLists?.length || 0}</p>
-                <p className='text-xs text-muted-foreground'>Contact Lists</p>
-              </div>
+            <div>
+              <p className='text-xl font-semibold text-[#111B21] dark:text-[#E9EDEF]'>
+                {broadcasts?.filter((b) => b.status === 'completed').length || 0}
+              </p>
+              <p className='text-xs text-[#667781] dark:text-[#8696A0]'>Completed</p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+          <div className='flex items-center gap-3 rounded-lg bg-white p-3 dark:bg-[#111B21]'>
+            <div className='rounded-full bg-amber-500/10 p-2.5'>
+              <Clock className='h-5 w-5 text-amber-500' />
+            </div>
+            <div>
+              <p className='text-xl font-semibold text-[#111B21] dark:text-[#E9EDEF]'>
+                {broadcasts?.filter((b) => b.status === 'scheduled').length || 0}
+              </p>
+              <p className='text-xs text-[#667781] dark:text-[#8696A0]'>Scheduled</p>
+            </div>
+          </div>
+          <div className='flex items-center gap-3 rounded-lg bg-white p-3 dark:bg-[#111B21]'>
+            <div className='rounded-full bg-purple-500/10 p-2.5'>
+              <Users className='h-5 w-5 text-purple-500' />
+            </div>
+            <div>
+              <p className='text-xl font-semibold text-[#111B21] dark:text-[#E9EDEF]'>
+                {broadcastLists?.length || 0}
+              </p>
+              <p className='text-xs text-[#667781] dark:text-[#8696A0]'>Contact Lists</p>
+            </div>
+          </div>
+        </div>
 
-      {/* Broadcasts List */}
-      <Tabs defaultValue='all'>
-        <TabsList>
-          <TabsTrigger value='all'>All</TabsTrigger>
-          <TabsTrigger value='completed'>Completed</TabsTrigger>
-          <TabsTrigger value='scheduled'>Scheduled</TabsTrigger>
-          <TabsTrigger value='sending'>In Progress</TabsTrigger>
-        </TabsList>
+        {/* Broadcasts List */}
+        <div className='p-4'>
+          <Tabs defaultValue='all'>
+            <TabsList className='bg-[#F0F2F5] dark:bg-[#202C33]'>
+              <TabsTrigger value='all'>All</TabsTrigger>
+              <TabsTrigger value='completed'>Completed</TabsTrigger>
+              <TabsTrigger value='scheduled'>Scheduled</TabsTrigger>
+              <TabsTrigger value='sending'>In Progress</TabsTrigger>
+            </TabsList>
 
-        <TabsContent value='all' className='mt-4'>
+            <TabsContent value='all' className='mt-4'>
           <div className='space-y-4'>
             {broadcastsLoading ? (
               [...Array(3)].map((_, i) => (
@@ -411,8 +402,10 @@ export function BroadcastPanel() {
                 </Card>
               ))}
           </div>
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+          </Tabs>
+        </div>
+      </div>
 
       {/* New Broadcast Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

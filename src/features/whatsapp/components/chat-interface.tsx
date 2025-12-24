@@ -1,60 +1,100 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  Search,
-  Send,
-  Paperclip,
-  Image as ImageIcon,
-  Smile,
-  MoreVertical,
-  Phone,
-  Video,
-  Check,
-  CheckCheck,
-  Clock,
   ArrowLeft,
-  Users,
-  MessageSquare,
+  MoreVertical,
+  Search,
+  Tag,
+  UserPlus,
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { toast } from 'sonner'
+
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useWhatsAppChats, useMessages, useSendTextMessage, useWhatsAppInstance } from '@/hooks/use-whatsapp'
-import type { Chat, Message } from '../types'
 import { cn } from '@/lib/utils'
-import { format } from 'date-fns'
-import { toast } from 'sonner'
+
+import {
+  useWhatsAppChats,
+  useMessages,
+  useSendTextMessage,
+  useWhatsAppInstance,
+  useConversationLabels,
+  useStaffMembers,
+  useArchiveChat,
+  useUnarchiveChat,
+  useSnoozeChat,
+  useCancelSnooze,
+  useAddLabelToChat,
+  useRemoveLabelFromChat,
+  useCreateLabel,
+  useAssignChat,
+  useUnassignChat,
+  useCreateInternalNote,
+  useEnhancedChats,
+  useCreateConversation,
+  useValidatePhoneNumber,
+} from '@/hooks/use-whatsapp'
+import type { Message, SnoozePreset, LabelColor, NewConversationRequest } from '../types'
+import { useWhatsAppUIStore } from '../stores/whatsapp-ui-store'
+
+// Import components
+import { ConversationList } from './inbox'
+import { ChatLabelPopover, ManagedCreateLabelDialog } from './labels'
+import { ChatSnoozePopover, SnoozeIndicator } from './snooze'
+import { ChatAssignPopover, AssignmentBadge, InternalNotesList } from './collaboration'
+import { EnhancedMessageInput } from './message-input'
+import { ManagedNewConversationDialog } from './new-conversation'
+import { MessageBubble } from './chat/message-bubble'
+import { EmptyState } from './chat/empty-state'
 
 export function ChatInterface() {
   const { data: instance } = useWhatsAppInstance()
-  const { data: chats, isLoading: chatsLoading } = useWhatsAppChats()
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [messageText, setMessageText] = useState('')
+  const { data: enhancedChatsData, isLoading: chatsLoading } = useEnhancedChats()
+  const { data: labels = [] } = useConversationLabels()
+  const { data: staffMembers = [] } = useStaffMembers()
+
+  const chats = enhancedChatsData?.chats || []
+
   const [showMobileChat, setShowMobileChat] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const { data: messages } = useMessages(selectedChat?.id || '', !!selectedChat)
-  const sendMessage = useSendTextMessage(instance?.instanceName || '')
+  const {
+    selectedChatId,
+    setSelectedChatId,
+    setNewConversationOpen,
+    setLabelPopoverChatId,
+    setSnoozePopoverChatId,
+    setAssignPopoverChatId,
+    replyMode,
+  } = useWhatsAppUIStore()
 
-  const filteredChats = chats?.filter(
-    (chat) =>
-      chat.contact.pushName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      chat.contact.number.includes(searchTerm)
-  )
+  const selectedChat = chats?.find((c) => c.id === selectedChatId) || null
+  const { data: messages } = useMessages(selectedChatId || '', !!selectedChatId)
+
+  // Mutations
+  const sendMessage = useSendTextMessage(instance?.instanceName || '')
+  const archiveMutation = useArchiveChat()
+  const unarchiveMutation = useUnarchiveChat()
+  const snoozeMutation = useSnoozeChat()
+  const cancelSnoozeMutation = useCancelSnooze()
+  const addLabelMutation = useAddLabelToChat()
+  const removeLabelMutation = useRemoveLabelFromChat()
+  const createLabelMutation = useCreateLabel()
+  const assignMutation = useAssignChat()
+  const unassignMutation = useUnassignChat()
+  const createNoteMutation = useCreateInternalNote()
+  const createConversationMutation = useCreateConversation()
+  const validatePhoneMutation = useValidatePhoneNumber()
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -64,237 +104,269 @@ export function ChatInterface() {
     scrollToBottom()
   }, [messages])
 
-  const handleSendMessage = async () => {
-    if (!messageText.trim() || !selectedChat) return
+  // Handlers
+  const handleSelectChat = (chatId: string) => {
+    setSelectedChatId(chatId)
+    setShowMobileChat(true)
+  }
+
+  const handleSendMessage = async (message: string, shouldArchive: boolean) => {
+    if (!selectedChat) return
 
     try {
       await sendMessage.mutateAsync({
         number: selectedChat.contact.number,
-        text: messageText,
+        text: message,
       })
-      setMessageText('')
-      toast.success('Message sent')
+
+      if (shouldArchive) {
+        await archiveMutation.mutateAsync(selectedChat.id)
+        toast.success('Message sent and archived')
+      } else {
+        toast.success('Message sent')
+      }
     } catch {
       toast.error('Failed to send message')
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
+  const handleSendInternalNote = async (content: string, mentions: string[]) => {
+    if (!selectedChatId) return
+
+    try {
+      const currentUserId = 'staff_1'
+      await createNoteMutation.mutateAsync({
+        chatId: selectedChatId,
+        authorId: currentUserId,
+        content,
+        mentions,
+      })
+      toast.success('Note added')
+    } catch {
+      toast.error('Failed to add note')
     }
   }
 
-  const getMessageStatus = (status: Message['status']) => {
-    switch (status) {
-      case 'read':
-        return <CheckCheck className='h-3 w-3 text-blue-500' />
-      case 'delivered':
-        return <CheckCheck className='h-3 w-3 text-muted-foreground' />
-      case 'sent':
-        return <Check className='h-3 w-3 text-muted-foreground' />
-      case 'pending':
-        return <Clock className='h-3 w-3 text-muted-foreground' />
-      default:
-        return null
+  const handleArchive = async (chatId: string) => {
+    try {
+      await archiveMutation.mutateAsync(chatId)
+      toast.success('Conversation archived')
+    } catch {
+      toast.error('Failed to archive')
     }
   }
 
-  const getMessageContent = (message: Message) => {
-    if (message.message.conversation) {
-      return message.message.conversation
+  const handleUnarchive = async (chatId: string) => {
+    try {
+      await unarchiveMutation.mutateAsync(chatId)
+      toast.success('Conversation unarchived')
+    } catch {
+      toast.error('Failed to unarchive')
     }
-    if (message.message.extendedTextMessage?.text) {
-      return message.message.extendedTextMessage.text
-    }
-    if (message.message.imageMessage) {
-      return (
-        <div className='space-y-1'>
-          <img
-            src={message.message.imageMessage.url}
-            alt='Image'
-            className='max-w-[200px] rounded-lg'
-          />
-          {message.message.imageMessage.caption && (
-            <p className='text-sm'>{message.message.imageMessage.caption}</p>
-          )}
-        </div>
-      )
-    }
-    if (message.message.locationMessage) {
-      return `📍 ${message.message.locationMessage.name || 'Location'}`
-    }
-    return '[Unsupported message type]'
   }
 
-  const handleSelectChat = (chat: Chat) => {
-    setSelectedChat(chat)
-    setShowMobileChat(true)
+  const handleSnooze = async (chatId: string, preset: SnoozePreset, returnAt: Date) => {
+    try {
+      await snoozeMutation.mutateAsync({ chatId, preset, returnAt })
+      toast.success('Conversation snoozed')
+    } catch {
+      toast.error('Failed to snooze')
+    }
+  }
+
+  const handleCancelSnooze = async (chatId: string) => {
+    try {
+      await cancelSnoozeMutation.mutateAsync(chatId)
+      toast.success('Snooze cancelled')
+    } catch {
+      toast.error('Failed to cancel snooze')
+    }
+  }
+
+  const handleAddLabel = async (chatId: string, labelId: string) => {
+    try {
+      await addLabelMutation.mutateAsync({ chatId, labelId })
+    } catch {
+      toast.error('Failed to add label')
+    }
+  }
+
+  const handleRemoveLabel = async (chatId: string, labelId: string) => {
+    try {
+      await removeLabelMutation.mutateAsync({ chatId, labelId })
+    } catch {
+      toast.error('Failed to remove label')
+    }
+  }
+
+  const handleCreateLabel = async (name: string, color: LabelColor) => {
+    try {
+      await createLabelMutation.mutateAsync({ name, color })
+      toast.success('Label created')
+    } catch {
+      toast.error('Failed to create label')
+    }
+  }
+
+  const handleAssign = async (chatId: string, staffId: string | null) => {
+    try {
+      if (staffId) {
+        await assignMutation.mutateAsync({ chatId, staffId })
+        toast.success('Conversation assigned')
+      } else {
+        await unassignMutation.mutateAsync(chatId)
+        toast.success('Assignment removed')
+      }
+    } catch {
+      toast.error('Failed to update assignment')
+    }
+  }
+
+  const handleMarkUnread = async (chatId: string) => {
+    toast.info('Mark as unread coming soon')
+  }
+
+  const handleCreateConversation = async (data: NewConversationRequest) => {
+    try {
+      await createConversationMutation.mutateAsync(data)
+      toast.success('Conversation started')
+      setNewConversationOpen(false)
+    } catch {
+      toast.error('Failed to start conversation')
+    }
+  }
+
+  const handleValidatePhone = async (phone: string) => {
+    try {
+      const countryCode = phone.match(/^\+\d{1,3}/)?.[0] || '+1'
+      const phoneNumber = phone.replace(countryCode, '')
+
+      const result = await validatePhoneMutation.mutateAsync({ phoneNumber, countryCode })
+      return {
+        isValid: result.valid,
+        message: result.error || (result.whatsappRegistered ? 'Valid WhatsApp number' : 'Number may not be on WhatsApp')
+      }
+    } catch {
+      return { isValid: false, message: 'Validation failed' }
+    }
   }
 
   return (
-    <Card className='h-[600px] overflow-hidden'>
-      <div className='flex h-full'>
-        {/* Chat List */}
+    <>
+      <div className='relative flex h-full w-full overflow-hidden'>
+        {/* Conversation List Panel */}
         <div
           className={cn(
-            'w-full border-r md:w-80 lg:w-96',
-            showMobileChat && 'hidden md:block'
+            'relative z-10 flex h-full w-[580px] min-w-[580px] flex-shrink-0 flex-col overflow-hidden bg-card shadow-[2px_0_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[2px_0_8px_-2px_rgba(0,0,0,0.3)]',
+            showMobileChat ? 'hidden md:flex' : 'flex'
           )}
         >
-          {/* Search */}
-          <div className='border-b p-3'>
-            <div className='relative'>
-              <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-              <Input
-                placeholder='Search conversations...'
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className='pl-9'
-              />
-            </div>
-          </div>
-
-          {/* Chats List */}
-          <ScrollArea className='h-[calc(600px-57px)]'>
-            {chatsLoading ? (
-              <div className='space-y-2 p-3'>
-                {[...Array(5)].map((_, i) => (
-                  <div
-                    key={i}
-                    className='flex items-center gap-3 rounded-lg p-3'
-                  >
-                    <div className='h-12 w-12 animate-pulse rounded-full bg-muted' />
-                    <div className='flex-1 space-y-2'>
-                      <div className='h-4 w-24 animate-pulse rounded bg-muted' />
-                      <div className='h-3 w-32 animate-pulse rounded bg-muted' />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : filteredChats?.length === 0 ? (
-              <div className='flex flex-col items-center justify-center py-10 text-muted-foreground'>
-                <MessageSquare className='mb-2 h-10 w-10' />
-                <p>No conversations found</p>
-              </div>
-            ) : (
-              <div className='p-2'>
-                {filteredChats?.map((chat) => (
-                  <motion.div
-                    key={chat.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-3 rounded-lg p-3 transition-colors hover:bg-muted',
-                      selectedChat?.id === chat.id && 'bg-muted'
-                    )}
-                    onClick={() => handleSelectChat(chat)}
-                  >
-                    <div className='relative'>
-                      <Avatar>
-                        <AvatarImage src={chat.contact.profilePicUrl} />
-                        <AvatarFallback>
-                          {chat.contact.isGroup ? (
-                            <Users className='h-5 w-5' />
-                          ) : (
-                            chat.contact.pushName.charAt(0)
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
-                      {chat.contact.isBusiness && (
-                        <span className='absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-[8px] text-white'>
-                          ✓
-                        </span>
-                      )}
-                    </div>
-                    <div className='flex-1 overflow-hidden'>
-                      <div className='flex items-center justify-between'>
-                        <p className='truncate font-medium'>
-                          {chat.contact.pushName}
-                        </p>
-                        <span className='text-xs text-muted-foreground'>
-                          {chat.lastMessage &&
-                            format(
-                              new Date(chat.lastMessage.messageTimestamp),
-                              'HH:mm'
-                            )}
-                        </span>
-                      </div>
-                      <div className='flex items-center justify-between'>
-                        <p className='truncate text-sm text-muted-foreground'>
-                          {chat.lastMessage?.key.fromMe && (
-                            <span className='mr-1'>
-                              {getMessageStatus(chat.lastMessage.status)}
-                            </span>
-                          )}
-                          {chat.lastMessage?.message.conversation?.slice(0, 30) ||
-                            'No messages yet'}
-                        </p>
-                        {chat.unreadCount > 0 && (
-                          <Badge className='ml-2 h-5 min-w-[20px] rounded-full px-1.5'>
-                            {chat.unreadCount}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
+          <ConversationList
+            chats={chats || []}
+            labels={labels}
+            staffMembers={staffMembers}
+            isLoading={chatsLoading}
+            onChatSelect={handleSelectChat}
+            onArchive={handleArchive}
+            onUnarchive={handleUnarchive}
+            onSnooze={(chatId) => setSnoozePopoverChatId(chatId)}
+            onOpenLabels={(chatId) => setLabelPopoverChatId(chatId)}
+            onOpenAssign={(chatId) => setAssignPopoverChatId(chatId)}
+            onMarkUnread={handleMarkUnread}
+            onNewConversation={() => setNewConversationOpen(true)}
+          />
         </div>
 
         {/* Chat Window */}
         <div
           className={cn(
-            'flex flex-1 flex-col',
-            !showMobileChat && 'hidden md:flex'
+            'flex min-w-0 flex-1 flex-col',
+            showMobileChat ? 'flex' : 'hidden md:flex'
           )}
         >
           {selectedChat ? (
             <>
               {/* Chat Header */}
-              <div className='flex items-center justify-between border-b p-3'>
+              <div className='flex h-14 flex-shrink-0 items-center justify-between border-b bg-card px-4'>
                 <div className='flex items-center gap-3'>
                   <Button
                     variant='ghost'
                     size='icon'
-                    className='md:hidden'
+                    className='size-9 md:hidden'
                     onClick={() => setShowMobileChat(false)}
                   >
                     <ArrowLeft className='h-5 w-5' />
                   </Button>
-                  <Avatar>
+                  <Avatar className='size-10'>
                     <AvatarImage src={selectedChat.contact.profilePicUrl} />
-                    <AvatarFallback>
-                      {selectedChat.contact.pushName.charAt(0)}
+                    <AvatarFallback className='bg-muted text-muted-foreground'>
+                      {selectedChat.contact.pushName?.charAt(0) || '?'}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <p className='font-medium'>{selectedChat.contact.pushName}</p>
+                  <div className='min-w-0'>
+                    <div className='flex items-center gap-2'>
+                      <h2 className='truncate font-medium text-foreground'>
+                        {selectedChat.contact.pushName || selectedChat.contact.number}
+                      </h2>
+                      {selectedChat.assignment && (
+                        <AssignmentBadge
+                          assignment={selectedChat.assignment}
+                          variant='compact'
+                        />
+                      )}
+                    </div>
                     <p className='text-xs text-muted-foreground'>
-                      {selectedChat.contact.number}
+                      {selectedChat.contact.isMyContact ? 'Online' : selectedChat.contact.number}
                     </p>
                   </div>
                 </div>
                 <div className='flex items-center gap-1'>
-                  <Button variant='ghost' size='icon'>
-                    <Phone className='h-4 w-4' />
+                  <Button variant='ghost' size='icon' className='size-10 text-muted-foreground hover:text-foreground'>
+                    <Search className='h-5 w-5' />
                   </Button>
-                  <Button variant='ghost' size='icon'>
-                    <Video className='h-4 w-4' />
-                  </Button>
+
+                  <ChatLabelPopover
+                    chatId={selectedChat.id}
+                    labels={labels}
+                    chatLabels={selectedChat.labels}
+                    onAddLabel={handleAddLabel}
+                    onRemoveLabel={handleRemoveLabel}
+                  >
+                    <Button variant='ghost' size='icon' className='size-10 text-muted-foreground hover:text-foreground'>
+                      <Tag className='h-5 w-5' />
+                    </Button>
+                  </ChatLabelPopover>
+
+                  <ChatAssignPopover
+                    chatId={selectedChat.id}
+                    staffMembers={staffMembers}
+                    currentAssigneeId={selectedChat.assignment?.assignedTo.id}
+                    onAssign={handleAssign}
+                  >
+                    <Button variant='ghost' size='icon' className='size-10 text-muted-foreground hover:text-foreground'>
+                      <UserPlus className='h-5 w-5' />
+                    </Button>
+                  </ChatAssignPopover>
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant='ghost' size='icon'>
-                        <MoreVertical className='h-4 w-4' />
+                      <Button variant='ghost' size='icon' className='size-10 text-muted-foreground hover:text-foreground'>
+                        <MoreVertical className='h-5 w-5' />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align='end'>
                       <DropdownMenuItem>View contact</DropdownMenuItem>
                       <DropdownMenuItem>Mute notifications</DropdownMenuItem>
-                      <DropdownMenuItem>Block contact</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      {selectedChat.status === 'archived' ? (
+                        <DropdownMenuItem onClick={() => handleUnarchive(selectedChat.id)}>
+                          Unarchive
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onClick={() => handleArchive(selectedChat.id)}>
+                          Archive
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem className='text-destructive'>
                         Delete chat
                       </DropdownMenuItem>
@@ -303,89 +375,94 @@ export function ChatInterface() {
                 </div>
               </div>
 
-              {/* Messages */}
-              <ScrollArea className='flex-1 p-4'>
-                <div className='space-y-4'>
-                  <AnimatePresence>
-                    {messages?.map((message) => (
-                      <motion.div
-                        key={message.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className={cn(
-                          'flex',
-                          message.key.fromMe ? 'justify-end' : 'justify-start'
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'max-w-[70%] rounded-lg px-3 py-2',
-                            message.key.fromMe
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
-                          )}
+              {/* Snooze indicator */}
+              {selectedChat.snooze && (
+                <div className='flex-shrink-0 border-b bg-amber-50 px-4 py-2 dark:bg-amber-500/10'>
+                  <SnoozeIndicator
+                    snooze={selectedChat.snooze}
+                    variant='full'
+                    onCancel={() => handleCancelSnooze(selectedChat.id)}
+                  />
+                </div>
+              )}
+
+              {/* Messages Area */}
+              <ScrollArea className='flex-1 overflow-hidden bg-muted/30'>
+                <div className='space-y-3 py-4'>
+                  {/* Internal notes */}
+                  {selectedChat.internalNotes.length > 0 && (
+                    <div className='mb-4 px-4'>
+                      <InternalNotesList notes={selectedChat.internalNotes} />
+                    </div>
+                  )}
+
+                  <AnimatePresence mode='popLayout'>
+                    {messages?.map((message, index) => {
+                      const prevMessage = messages[index - 1]
+                      const showTail = !prevMessage || prevMessage.key.fromMe !== message.key.fromMe
+
+                      return (
+                        <motion.div
+                          key={message.id}
+                          layout
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, x: message.key.fromMe ? 30 : -30 }}
+                          transition={{
+                            duration: 0.2,
+                            delay: Math.min(index * 0.02, 0.15),
+                            ease: [0.4, 0, 0.2, 1]
+                          }}
                         >
-                          <div className='text-sm'>
-                            {getMessageContent(message)}
-                          </div>
-                          <div
-                            className={cn(
-                              'mt-1 flex items-center justify-end gap-1 text-[10px]',
-                              message.key.fromMe
-                                ? 'text-primary-foreground/70'
-                                : 'text-muted-foreground'
-                            )}
-                          >
-                            {format(
-                              new Date(message.messageTimestamp),
-                              'HH:mm'
-                            )}
-                            {message.key.fromMe && getMessageStatus(message.status)}
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                          <MessageBubble message={message} showTail={showTail} />
+                        </motion.div>
+                      )
+                    })}
                   </AnimatePresence>
                   <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
 
               {/* Message Input */}
-              <div className='border-t p-3'>
-                <div className='flex items-end gap-2'>
-                  <Button variant='ghost' size='icon'>
-                    <Smile className='h-5 w-5' />
-                  </Button>
-                  <Button variant='ghost' size='icon'>
-                    <Paperclip className='h-5 w-5' />
-                  </Button>
-                  <Textarea
-                    placeholder='Type a message...'
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    onKeyDown={handleKeyPress}
-                    className='min-h-[40px] max-h-[120px] flex-1 resize-none'
-                    rows={1}
-                  />
-                  <Button
-                    size='icon'
-                    onClick={handleSendMessage}
-                    disabled={!messageText.trim() || sendMessage.isPending}
-                  >
-                    <Send className='h-4 w-4' />
-                  </Button>
-                </div>
+              <div className='flex-shrink-0 border-t bg-card'>
+                <EnhancedMessageInput
+                  onSendMessage={handleSendMessage}
+                  onSendInternalNote={handleSendInternalNote}
+                  staffMembers={staffMembers}
+                  isLoading={sendMessage.isPending}
+                  disabled={!selectedChat}
+                />
               </div>
             </>
           ) : (
-            <div className='flex flex-1 flex-col items-center justify-center text-muted-foreground'>
-              <MessageSquare className='mb-4 h-16 w-16' />
-              <h3 className='text-lg font-medium'>Select a conversation</h3>
-              <p className='text-sm'>Choose from your existing chats or start a new one</p>
-            </div>
+            <EmptyState />
           )}
         </div>
       </div>
-    </Card>
+
+      {/* Dialogs */}
+      <ManagedNewConversationDialog
+        labels={labels}
+        staffMembers={staffMembers}
+        onValidatePhone={handleValidatePhone}
+        onCreate={handleCreateConversation}
+        isLoading={createConversationMutation.isPending}
+      />
+
+      <ManagedCreateLabelDialog
+        onCreateLabel={handleCreateLabel}
+        isLoading={createLabelMutation.isPending}
+      />
+
+      {chats.map((chat) => (
+        <ChatSnoozePopover
+          key={`snooze-${chat.id}`}
+          chatId={chat.id}
+          onSnooze={handleSnooze}
+        >
+          <span className='hidden' />
+        </ChatSnoozePopover>
+      ))}
+    </>
   )
 }

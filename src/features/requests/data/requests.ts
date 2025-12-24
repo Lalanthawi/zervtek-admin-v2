@@ -242,7 +242,10 @@ export const requests: ServiceRequest[] = Array.from({ length: 120 }, (_, index)
     threads,
     notes: faker.helpers.maybe(() => faker.lorem.sentence()),
     price: basePrice,
-    createdAt: faker.date.past({ years: 1 }),
+    // Use recent dates for inspections so they appear in the date tabs (past 7 to next 7 days)
+    createdAt: type === 'inspection'
+      ? faker.date.recent({ days: 14 })
+      : faker.date.past({ years: 1 }),
     updatedAt: faker.date.recent({ days: 7 }),
     inspectionMedia: inspectionMedia.length > 0 ? inspectionMedia : undefined,
     inspectionNotes: inspectionNotes.length > 0 ? inspectionNotes : undefined,

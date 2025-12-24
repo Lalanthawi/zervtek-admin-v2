@@ -6,6 +6,21 @@
 
 :root {
   --radius: 0.625rem;
+
+  /* WhatsApp Colors - Light */
+  --wa-teal-green: #00A884;
+  --wa-light-green: #D9FDD3;
+  --wa-panel-header: #F0F2F5;
+  --wa-panel-bg: #FFFFFF;
+  --wa-chat-bg: #EFEAE2;
+  --wa-text-primary: #111B21;
+  --wa-text-secondary: #667781;
+  --wa-border: #E9EDEF;
+  --wa-unread-badge: #25D366;
+  --wa-sidebar-bg: #F0F2F5;
+  --wa-sidebar-hover: #E9EDEF;
+  --wa-sidebar-active: #00A884;
+  --wa-sidebar-text: #54656F;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
@@ -41,6 +56,21 @@
 }
 
 .dark {
+  /* WhatsApp Colors - Dark */
+  --wa-teal-green: #00A884;
+  --wa-light-green: #005C4B;
+  --wa-panel-header: #202C33;
+  --wa-panel-bg: #111B21;
+  --wa-chat-bg: #0B141A;
+  --wa-text-primary: #E9EDEF;
+  --wa-text-secondary: #8696A0;
+  --wa-border: #222E35;
+  --wa-unread-badge: #25D366;
+  --wa-sidebar-bg: #202C33;
+  --wa-sidebar-hover: #2A3942;
+  --wa-sidebar-active: #00A884;
+  --wa-sidebar-text: #AEBAC1;
+
   --background: oklch(0.145 0.03 264.695);
   --foreground: oklch(0.985 0.003 247.858);
   --card: oklch(0.17 0.03 264.695);

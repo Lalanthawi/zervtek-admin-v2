@@ -79,13 +79,25 @@ function NavBadge({ children, variant = 'default' }: { children: ReactNode; vari
 }
 
 function SidebarMenuLink({ item, pathname }: { item: NavLink; pathname: string }) {
-  const { setOpenMobile } = useSidebar()
+  const { setOpenMobile, setOpen } = useSidebar()
   const isActive = checkIsActive(pathname, item)
 
   // Determine badge variant based on title (for pending approvals, use warning)
   const getBadgeVariant = () => {
     if (item.title === 'Bids') return 'warning'
     return 'default'
+  }
+
+  const handleClick = () => {
+    setOpenMobile(false)
+    // Collapse sidebar when navigating to WhatsApp
+    if (item.url === '/whatsapp') {
+      setOpen(false)
+    }
+    // Expand sidebar when navigating away from WhatsApp
+    else if (pathname === '/whatsapp') {
+      setOpen(true)
+    }
   }
 
   return (
@@ -100,7 +112,7 @@ function SidebarMenuLink({ item, pathname }: { item: NavLink; pathname: string }
           isActive && 'bg-accent font-medium'
         )}
       >
-        <Link href={item.url} onClick={() => setOpenMobile(false)}>
+        <Link href={item.url} onClick={handleClick}>
           {item.icon && (
             <item.icon
               className={cn(
@@ -131,8 +143,16 @@ function SidebarMenuCollapsible({
   item: NavCollapsible
   pathname: string
 }) {
-  const { setOpenMobile } = useSidebar()
+  const { setOpenMobile, setOpen } = useSidebar()
   const isParentActive = checkIsActive(pathname, item, true)
+
+  const handleSubItemClick = (subItemUrl: string) => {
+    setOpenMobile(false)
+    // Expand sidebar when navigating away from WhatsApp
+    if (pathname === '/whatsapp' && subItemUrl !== '/whatsapp') {
+      setOpen(true)
+    }
+  }
 
   return (
     <Collapsible
@@ -179,7 +199,7 @@ function SidebarMenuCollapsible({
                       isSubActive && 'bg-accent font-medium text-foreground'
                     )}
                   >
-                    <Link href={subItem.url} onClick={() => setOpenMobile(false)}>
+                    <Link href={subItem.url} onClick={() => handleSubItemClick(subItem.url)}>
                       {subItem.icon && (
                         <subItem.icon
                           className={cn(
@@ -216,7 +236,15 @@ function SidebarMenuCollapsedDropdown({
   item: NavCollapsible
   pathname: string
 }) {
+  const { setOpen } = useSidebar()
   const isActive = checkIsActive(pathname, item)
+
+  const handleSubItemClick = (subItemUrl: string) => {
+    // Expand sidebar when navigating away from WhatsApp
+    if (pathname === '/whatsapp' && subItemUrl !== '/whatsapp') {
+      setOpen(true)
+    }
+  }
 
   return (
     <SidebarMenuItem>
@@ -262,6 +290,7 @@ function SidebarMenuCollapsedDropdown({
               <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
                 <Link
                   href={sub.url}
+                  onClick={() => handleSubItemClick(sub.url)}
                   className={cn(
                     'flex items-center gap-2 transition-colors',
                     isSubActive && 'bg-accent font-medium'

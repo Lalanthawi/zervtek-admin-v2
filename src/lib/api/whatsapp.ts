@@ -12,6 +12,17 @@ import type {
   CreateInstanceRequest,
   WebhookConfig,
   QRCodeData,
+  ConversationLabel,
+  StaffMember,
+  StaffGroup,
+  InternalNote,
+  EnhancedChat,
+  StaffPerformance,
+  UserPreferences,
+  ChatStatus,
+  NewConversationRequest,
+  StatsDateRange,
+  EnhancedWhatsAppStats,
 } from '@/features/whatsapp/types'
 import {
   mockInstance,
@@ -21,6 +32,13 @@ import {
   mockBroadcastLists,
   mockBroadcasts,
   generateMockStats,
+  mockLabels,
+  mockStaffMembers,
+  mockStaffGroups,
+  mockInternalNotes,
+  mockEnhancedChats,
+  mockUserPreferences,
+  mockTeamPerformance,
 } from '@/features/whatsapp/data/mock-data'
 
 // Simulate API delay
@@ -262,4 +280,334 @@ export async function setWebhookConfig(
 ): Promise<WebhookConfig> {
   await delay(500)
   return config
+}
+
+// ============ Labels ============
+
+export async function fetchLabels(): Promise<ConversationLabel[]> {
+  await delay(300)
+  return mockLabels
+}
+
+export async function createLabel(
+  data: Omit<ConversationLabel, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<ConversationLabel> {
+  await delay(400)
+  return {
+    ...data,
+    id: `label_${Date.now()}`,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+}
+
+export async function updateLabel(
+  id: string,
+  data: Partial<ConversationLabel>
+): Promise<ConversationLabel> {
+  await delay(300)
+  const existing = mockLabels.find((l) => l.id === id)
+  if (!existing) throw new Error('Label not found')
+  return { ...existing, ...data, updatedAt: new Date() }
+}
+
+export async function deleteLabel(id: string): Promise<void> {
+  await delay(300)
+}
+
+export async function addLabelToChat(chatId: string, labelId: string): Promise<void> {
+  await delay(200)
+}
+
+export async function removeLabelFromChat(chatId: string, labelId: string): Promise<void> {
+  await delay(200)
+}
+
+// ============ Archive & Snooze ============
+
+export async function archiveChat(chatId: string): Promise<{ success: boolean; status: ChatStatus }> {
+  await delay(300)
+  return { success: true, status: 'archived' }
+}
+
+export async function unarchiveChat(chatId: string): Promise<{ success: boolean; status: ChatStatus }> {
+  await delay(300)
+  return { success: true, status: 'active' }
+}
+
+export async function snoozeChat(
+  chatId: string,
+  returnAt: Date,
+  preset: string
+): Promise<{ success: boolean; status: ChatStatus; returnAt: Date }> {
+  await delay(300)
+  return { success: true, status: 'snoozed', returnAt }
+}
+
+export async function cancelSnooze(chatId: string): Promise<{ success: boolean; status: ChatStatus }> {
+  await delay(200)
+  return { success: true, status: 'active' }
+}
+
+export async function markAsUnread(chatId: string): Promise<void> {
+  await delay(200)
+}
+
+// ============ Enhanced Chats ============
+
+export async function fetchEnhancedChats(options?: {
+  status?: ChatStatus
+  labelId?: string
+  assignedTo?: string
+  search?: string
+}): Promise<{ chats: EnhancedChat[]; counts: { active: number; archived: number; snoozed: number } }> {
+  await delay(500)
+
+  let filteredChats = [...mockEnhancedChats]
+
+  if (options?.status) {
+    filteredChats = filteredChats.filter((c) => c.status === options.status)
+  }
+
+  if (options?.labelId) {
+    filteredChats = filteredChats.filter((c) =>
+      c.labels.some((l) => l.id === options.labelId)
+    )
+  }
+
+  if (options?.assignedTo) {
+    filteredChats = filteredChats.filter(
+      (c) => c.assignment?.assignedTo.id === options.assignedTo
+    )
+  }
+
+  if (options?.search) {
+    const lowerSearch = options.search.toLowerCase()
+    filteredChats = filteredChats.filter(
+      (c) =>
+        c.contact.pushName.toLowerCase().includes(lowerSearch) ||
+        c.contact.number.includes(options.search!)
+    )
+  }
+
+  // Sort: pinned first, then by last message
+  filteredChats.sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1
+    if (!a.pinned && b.pinned) return 1
+    const aTime = a.lastMessage?.messageTimestamp || 0
+    const bTime = b.lastMessage?.messageTimestamp || 0
+    return bTime - aTime
+  })
+
+  return {
+    chats: filteredChats,
+    counts: {
+      active: mockEnhancedChats.filter((c) => c.status === 'active').length,
+      archived: mockEnhancedChats.filter((c) => c.status === 'archived').length,
+      snoozed: mockEnhancedChats.filter((c) => c.status === 'snoozed').length,
+    },
+  }
+}
+
+// ============ Staff & Assignment ============
+
+export async function fetchStaffMembers(): Promise<StaffMember[]> {
+  await delay(400)
+  return mockStaffMembers
+}
+
+export async function fetchStaffGroups(): Promise<StaffGroup[]> {
+  await delay(400)
+  return mockStaffGroups
+}
+
+export async function createStaffGroup(
+  data: Omit<StaffGroup, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<StaffGroup> {
+  await delay(500)
+  return {
+    ...data,
+    id: `group_${Date.now()}`,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+}
+
+export async function updateStaffGroup(
+  id: string,
+  data: Partial<StaffGroup>
+): Promise<StaffGroup> {
+  await delay(400)
+  const existing = mockStaffGroups.find((g) => g.id === id)
+  if (!existing) throw new Error('Staff group not found')
+  return { ...existing, ...data, updatedAt: new Date() }
+}
+
+export async function deleteStaffGroup(id: string): Promise<void> {
+  await delay(300)
+}
+
+export async function assignChatToStaff(
+  chatId: string,
+  staffId: string
+): Promise<void> {
+  await delay(300)
+}
+
+export async function unassignChat(chatId: string): Promise<void> {
+  await delay(200)
+}
+
+// ============ Internal Notes ============
+
+export async function fetchInternalNotes(chatId: string): Promise<InternalNote[]> {
+  await delay(300)
+  return mockInternalNotes.filter((n) => n.chatId === chatId)
+}
+
+export async function createInternalNote(
+  data: Omit<InternalNote, 'id' | 'createdAt' | 'author'>
+): Promise<InternalNote> {
+  await delay(400)
+  const author = mockStaffMembers.find((s) => s.id === data.authorId)
+  if (!author) throw new Error('Author not found')
+  return {
+    ...data,
+    id: `note_${Date.now()}`,
+    author,
+    createdAt: new Date(),
+  }
+}
+
+export async function deleteInternalNote(noteId: string): Promise<void> {
+  await delay(200)
+}
+
+// ============ Enhanced Stats ============
+
+export async function fetchEnhancedStats(options?: {
+  dateRange?: StatsDateRange
+  userId?: string
+}): Promise<EnhancedWhatsAppStats> {
+  await delay(500)
+  const baseStats = generateMockStats()
+  return {
+    ...baseStats,
+    userId: options?.userId,
+    dateRange: options?.dateRange,
+    teamStats: mockTeamPerformance,
+  }
+}
+
+export async function fetchTeamPerformance(
+  dateRange?: StatsDateRange
+): Promise<StaffPerformance[]> {
+  await delay(600)
+  return mockTeamPerformance
+}
+
+// ============ New Conversation ============
+
+export async function validatePhoneNumber(
+  phoneNumber: string,
+  countryCode: string
+): Promise<{ valid: boolean; formatted: string; whatsappRegistered: boolean; error?: string }> {
+  await delay(300)
+
+  const cleanNumber = phoneNumber.replace(/\D/g, '')
+
+  if (cleanNumber.length < 6) {
+    return {
+      valid: false,
+      formatted: '',
+      whatsappRegistered: false,
+      error: 'Phone number is too short',
+    }
+  }
+
+  const formatted = `${countryCode} ${cleanNumber.slice(0, 3)} ${cleanNumber.slice(3, 7)} ${cleanNumber.slice(7)}`.trim()
+
+  return {
+    valid: true,
+    formatted,
+    whatsappRegistered: true,
+  }
+}
+
+export async function createNewConversation(
+  data: NewConversationRequest
+): Promise<EnhancedChat> {
+  await delay(600)
+
+  const fullNumber = `${data.countryCode}${data.phoneNumber.replace(/\D/g, '')}`
+  const jid = `${fullNumber.replace(/\D/g, '')}@s.whatsapp.net`
+
+  const newChat: EnhancedChat = {
+    id: jid,
+    contact: {
+      id: jid,
+      pushName: data.name || fullNumber,
+      number: fullNumber,
+      isGroup: false,
+      isMyContact: false,
+      isBusiness: false,
+      unreadCount: 0,
+    },
+    messages: data.initialMessage
+      ? [
+          {
+            id: `msg_${Date.now()}`,
+            key: { remoteJid: jid, fromMe: true, id: `sent_${Date.now()}` },
+            message: { conversation: data.initialMessage },
+            messageType: 'text',
+            messageTimestamp: Date.now(),
+            status: 'sent',
+          },
+        ]
+      : [],
+    lastMessage: data.initialMessage
+      ? {
+          id: `msg_${Date.now()}`,
+          key: { remoteJid: jid, fromMe: true, id: `sent_${Date.now()}` },
+          message: { conversation: data.initialMessage },
+          messageType: 'text',
+          messageTimestamp: Date.now(),
+          status: 'sent',
+        }
+      : undefined,
+    unreadCount: 0,
+    pinned: false,
+    muted: false,
+    archived: false,
+    labels: data.labels
+      ? mockLabels.filter((l) => data.labels!.includes(l.id))
+      : [],
+    status: 'active',
+    isUnread: false,
+    internalNotes: [],
+    assignment: data.assignToId
+      ? {
+          chatId: jid,
+          assignedTo: mockStaffMembers.find((s) => s.id === data.assignToId)!,
+          assignedBy: mockStaffMembers[0],
+          assignedAt: new Date(),
+        }
+      : undefined,
+  }
+
+  return newChat
+}
+
+// ============ User Preferences ============
+
+export async function fetchUserPreferences(): Promise<UserPreferences> {
+  await delay(200)
+  return mockUserPreferences
+}
+
+export async function updateUserPreferences(
+  data: Partial<UserPreferences>
+): Promise<UserPreferences> {
+  await delay(300)
+  return { ...mockUserPreferences, ...data }
 }

@@ -8,7 +8,6 @@ import {
   Hand,
   ShoppingCart,
   Car,
-  Languages,
   Tv,
   Globe,
   Database,
@@ -102,16 +101,10 @@ export const sidebarNavGroups: NavGroup[] = [
     roles: [...FINANCE_ROLES],
     items: [
       {
-        title: 'Translations',
-        url: '/translations',
-        icon: Languages,
-        badge: pendingTranslationsCount > 0 ? String(pendingTranslationsCount) : undefined,
-      },
-      {
-        title: 'Inspections',
-        url: '/inspections',
+        title: 'Tasks',
+        url: '/services',
         icon: ClipboardCheck,
-        badge: pendingInspectionsCount > 0 ? String(pendingInspectionsCount) : undefined,
+        badge: (pendingTranslationsCount + pendingInspectionsCount) > 0 ? String(pendingTranslationsCount + pendingInspectionsCount) : undefined,
       },
       { title: 'TV Display', url: '/tv-display', icon: Tv },
     ],

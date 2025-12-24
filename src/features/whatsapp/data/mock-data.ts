@@ -7,6 +7,13 @@ import type {
   BroadcastList,
   BroadcastMessage,
   WhatsAppStats,
+  ConversationLabel,
+  StaffMember,
+  StaffGroup,
+  InternalNote,
+  EnhancedChat,
+  StaffPerformance,
+  UserPreferences,
 } from '../types'
 
 // Mock WhatsApp Instance
@@ -327,5 +334,233 @@ export function generateMockStats(): WhatsAppStats {
     messagesSent: mockStats.messagesSent + Math.floor(Math.random() * 50),
     messagesReceived: mockStats.messagesReceived + Math.floor(Math.random() * 40),
     activeChats: mockStats.activeChats + Math.floor(Math.random() * 10) - 5,
+  }
+}
+
+// ============ Labels ============
+export const mockLabels: ConversationLabel[] = [
+  {
+    id: 'label_1',
+    name: 'Lead',
+    color: 'red',
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: 'label_2',
+    name: 'Support',
+    color: 'blue',
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: 'label_3',
+    name: 'VIP',
+    color: 'amber',
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: 'label_4',
+    name: 'Follow-up',
+    color: 'green',
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+  {
+    id: 'label_5',
+    name: 'Urgent',
+    color: 'orange',
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-01'),
+  },
+]
+
+// ============ Staff Members ============
+export const mockStaffMembers: StaffMember[] = [
+  {
+    id: 'staff_1',
+    firstName: 'Sarah',
+    lastName: 'Miller',
+    email: 'sarah.miller@zervtek.com',
+    role: 'sales_staff',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
+    isOnline: true,
+  },
+  {
+    id: 'staff_2',
+    firstName: 'Mike',
+    lastName: 'Johnson',
+    email: 'mike.johnson@zervtek.com',
+    role: 'support_staff',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mike',
+    isOnline: true,
+  },
+  {
+    id: 'staff_3',
+    firstName: 'Jessica',
+    lastName: 'Chen',
+    email: 'jessica.chen@zervtek.com',
+    role: 'manager',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica',
+    isOnline: false,
+  },
+  {
+    id: 'staff_4',
+    firstName: 'David',
+    lastName: 'Kim',
+    email: 'david.kim@zervtek.com',
+    role: 'admin',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
+    isOnline: true,
+  },
+  {
+    id: 'staff_5',
+    firstName: 'Emily',
+    lastName: 'Brown',
+    email: 'emily.brown@zervtek.com',
+    role: 'sales_staff',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emily',
+    isOnline: false,
+  },
+]
+
+// ============ Staff Groups ============
+export const mockStaffGroups: StaffGroup[] = [
+  {
+    id: 'group_1',
+    name: 'Sales Team',
+    description: 'All sales staff members',
+    members: mockStaffMembers.filter((s) => s.role === 'sales_staff'),
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-15'),
+  },
+  {
+    id: 'group_2',
+    name: 'Support Team',
+    description: 'Customer support staff',
+    members: mockStaffMembers.filter((s) => s.role === 'support_staff'),
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-15'),
+  },
+  {
+    id: 'group_3',
+    name: 'Management',
+    description: 'Managers and administrators',
+    members: mockStaffMembers.filter((s) => s.role === 'manager' || s.role === 'admin'),
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-15'),
+  },
+]
+
+// ============ Internal Notes ============
+export const mockInternalNotes: InternalNote[] = [
+  {
+    id: 'note_1',
+    chatId: '81901234567@s.whatsapp.net',
+    authorId: 'staff_1',
+    author: mockStaffMembers[0],
+    content: 'Customer is interested in Land Cruiser. Prefers morning calls.',
+    mentions: [],
+    createdAt: new Date('2024-01-19T10:00:00'),
+  },
+  {
+    id: 'note_2',
+    chatId: '81901234567@s.whatsapp.net',
+    authorId: 'staff_3',
+    author: mockStaffMembers[2],
+    content: '@staff_1 Please follow up with a quote by EOD.',
+    mentions: ['staff_1'],
+    createdAt: new Date('2024-01-19T11:30:00'),
+  },
+  {
+    id: 'note_3',
+    chatId: '81801234567@s.whatsapp.net',
+    authorId: 'staff_2',
+    author: mockStaffMembers[1],
+    content: 'Business account - Yuki Motors. They buy in bulk. VIP treatment.',
+    mentions: [],
+    createdAt: new Date('2024-01-18T09:00:00'),
+  },
+]
+
+// ============ Enhanced Chats ============
+export const mockEnhancedChats: EnhancedChat[] = mockChats.map((chat, index) => ({
+  ...chat,
+  labels: index === 0
+    ? [mockLabels[0], mockLabels[2]] // Lead, VIP
+    : index === 1
+    ? [mockLabels[2]] // VIP
+    : index === 3
+    ? [mockLabels[1], mockLabels[4]] // Support, Urgent
+    : [],
+  snooze: index === 4
+    ? {
+        preset: 'tomorrow' as const,
+        returnAt: new Date(Date.now() + 86400000), // Tomorrow
+        createdAt: new Date(),
+      }
+    : undefined,
+  assignment: index === 0 || index === 1
+    ? {
+        chatId: chat.id,
+        assignedTo: mockStaffMembers[0],
+        assignedBy: mockStaffMembers[2],
+        assignedAt: new Date('2024-01-19T08:00:00'),
+      }
+    : index === 3
+    ? {
+        chatId: chat.id,
+        assignedTo: mockStaffMembers[1],
+        assignedBy: mockStaffMembers[2],
+        assignedAt: new Date('2024-01-19T14:00:00'),
+      }
+    : undefined,
+  internalNotes: mockInternalNotes.filter((note) => note.chatId === chat.id),
+  status: index === 4 ? 'snoozed' : index === 5 ? 'archived' : 'active',
+  isUnread: chat.unreadCount > 0,
+  lastStaffInteraction: new Date(Date.now() - Math.random() * 86400000),
+}))
+
+// ============ User Preferences ============
+export const mockUserPreferences: UserPreferences = {
+  defaultReplyMode: 'reply',
+  keyboardShortcuts: {
+    send: 'enter',
+    sendAndArchive: 'ctrl_enter',
+  },
+}
+
+// ============ Team Performance Stats ============
+export const mockTeamPerformance: StaffPerformance[] = mockStaffMembers
+  .filter((s) => s.role === 'sales_staff' || s.role === 'support_staff')
+  .map((staff) => ({
+    staff,
+    messagesSent: Math.floor(Math.random() * 200) + 50,
+    messagesReceived: Math.floor(Math.random() * 180) + 40,
+    avgResponseTime: Math.round((Math.random() * 10 + 1) * 10) / 10, // 1-11 minutes
+    activeChats: Math.floor(Math.random() * 20) + 5,
+    resolvedChats: Math.floor(Math.random() * 50) + 20,
+    resolutionRate: Math.round((Math.random() * 15 + 85) * 10) / 10, // 85-100%
+  }))
+
+// ============ Helper Functions ============
+export function getActiveChats(): EnhancedChat[] {
+  return mockEnhancedChats.filter((chat) => chat.status === 'active')
+}
+
+export function getArchivedChats(): EnhancedChat[] {
+  return mockEnhancedChats.filter((chat) => chat.status === 'archived')
+}
+
+export function getSnoozedChats(): EnhancedChat[] {
+  return mockEnhancedChats.filter((chat) => chat.status === 'snoozed')
+}
+
+export function getChatCounts(): { active: number; archived: number; snoozed: number } {
+  return {
+    active: getActiveChats().length,
+    archived: getArchivedChats().length,
+    snoozed: getSnoozedChats().length,
   }
 }

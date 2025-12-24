@@ -155,40 +155,50 @@ export function TemplatesPanel() {
   }
 
   return (
-    <div className='space-y-4'>
-      {/* Header */}
-      <div className='flex flex-wrap items-center justify-between gap-4'>
-        <div className='flex flex-1 items-center gap-4'>
-          <div className='relative flex-1 max-w-sm'>
-            <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-            <Input
-              placeholder='Search templates...'
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className='pl-9'
-            />
-          </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className='w-[150px]'>
-              <SelectValue placeholder='Category' />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='all'>All Categories</SelectItem>
-              <SelectItem value='marketing'>Marketing</SelectItem>
-              <SelectItem value='utility'>Utility</SelectItem>
-              <SelectItem value='authentication'>Authentication</SelectItem>
-              <SelectItem value='service'>Service</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button onClick={() => handleOpenDialog()}>
+    <div className='flex h-full flex-col'>
+      {/* Header - WhatsApp style */}
+      <div className='flex h-14 flex-shrink-0 items-center justify-between border-b border-[var(--wa-border)] bg-[#F0F2F5] px-4 dark:bg-[#202C33]'>
+        <h2 className='text-lg font-medium text-[#111B21] dark:text-[#E9EDEF]'>
+          Message Templates
+        </h2>
+        <Button
+          onClick={() => handleOpenDialog()}
+          className='bg-[#00A884] text-white hover:bg-[#00A884]/90'
+        >
           <Plus className='mr-2 h-4 w-4' />
           New Template
         </Button>
       </div>
 
-      {/* Templates Table */}
-      <Card>
+      {/* Search & Filters */}
+      <div className='flex flex-shrink-0 items-center gap-3 border-b border-[var(--wa-border)] bg-white px-4 py-3 dark:bg-[#111B21]'>
+        <div className='relative flex-1 max-w-md'>
+          <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#54656F] dark:text-[#AEBAC1]' />
+          <Input
+            placeholder='Search templates...'
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className='h-9 rounded-lg border-0 bg-[#F0F2F5] pl-10 text-sm dark:bg-[#202C33] dark:text-[#E9EDEF]'
+          />
+        </div>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className='h-9 w-[150px] border-0 bg-[#F0F2F5] dark:bg-[#202C33]'>
+            <SelectValue placeholder='Category' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='all'>All Categories</SelectItem>
+            <SelectItem value='marketing'>Marketing</SelectItem>
+            <SelectItem value='utility'>Utility</SelectItem>
+            <SelectItem value='authentication'>Authentication</SelectItem>
+            <SelectItem value='service'>Service</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Content */}
+      <div className='flex-1 overflow-auto bg-white p-4 dark:bg-[#111B21]'>
+        {/* Templates Table */}
+        <Card className='border-[var(--wa-border)]'>
         <Table>
           <TableHeader>
             <TableRow>
@@ -292,7 +302,8 @@ export function TemplatesPanel() {
             )}
           </TableBody>
         </Table>
-      </Card>
+        </Card>
+      </div>
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
